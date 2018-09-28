@@ -8,34 +8,28 @@
     </parent>
 
     <groupId>fr.soleil.lib.Lima.Camera</groupId>
-    <artifactId>LimaAviex-${aol}-shared-${mode}</artifactId>
-    <version>1.0.13</version>
+    <artifactId>LimaUfxc-${aol}-shared-${mode}</artifactId>
+    <version>0.0.1</version>
 
     <packaging>nar</packaging>
-    <name>LimaAviex</name>
-    <description>This module controls the Basler Camera</description>
+    <name>LimaUfxc</name>
+    <description>This module controls the UFXC Camera</description>
     
     <scm>
-        <connection>scm:git:git://github.com/soleil-ica/Lima-camera-aviex.git</connection>
-        <developerConnection>scm:git:git://github.com/soleil-ica/Lima-camera-aviex.git</developerConnection>
-        <url>https://github.com/soleil-ica/Lima-camera-aviex</url>
+        <connection>scm:git:git://github.com/soleil-ica/Lima-camera-ufxc.git</connection>
+        <developerConnection>scm:git:git://github.com/soleil-ica/Lima-camera-ufxc.git</developerConnection>
+        <url>https://github.com/soleil-ica/Lima-camera-ufxc</url>
     </scm>
 	
     <dependencies>
         <dependency>
             <groupId>fr.soleil.lib</groupId>
             <artifactId>LimaCore-${aol}-shared-${mode}</artifactId>
-            <version>1.7.7</version></dependency>
-        <dependency>
-            <groupId>edu.iit</groupId>
-            <artifactId>Mx-${aol}-shared-${mode}</artifactId>
-            <version>1.5.2</version>
+            <version>1.7.7</version>
         </dependency>
-      
-        <dependency>
-            <groupId>ncsa.uiuc.edu</groupId>
-            <artifactId>HDF5-${aol}-shared-release</artifactId>
-        </dependency>      
+        <dependency>  
+        </dependency>
+    
     </dependencies>
 
     <build>
@@ -49,9 +43,6 @@
                         <includePaths>
                             <includePath>include</includePath>
                         </includePaths>
-                        <defines>
-                            <define>OS_UNIX</define>
-                        </defines>
                         <!-- define less verbose mode for gcc-->
                         <options>
                             <option>-w</option>
