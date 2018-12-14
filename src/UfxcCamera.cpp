@@ -1,7 +1,7 @@
 //###########################################################################
 // This file is part of LImA, a Library for Image Acquisition
 //
-// Copyright (C) : 2009-2018
+// Copyright (C) : 2009-2014
 // European Synchrotron Radiation Facility
 // BP 220, Grenoble 38043
 // FRANCE
@@ -20,1360 +20,778 @@
 // along with this program; if not, see <http://www.gnu.org/licenses/>.
 //###########################################################################
 
-#include <cstdlib>
-
-
+#include <sstream>
+#include <iostream>
+#include <string>
+#include <math.h>
+//#include <chrono>
+#include <climits>
+#include <iomanip>
+#include <signal.h>
+#include <unistd.h>
+#include <errno.h>
 #include "lima/Exceptions.h"
-
-
+#include "lima/Debug.h"
+#include "lima/MiscUtils.h"
 #include "UfxcCamera.h"
 
 using namespace lima;
 using namespace lima::Ufxc;
+using namespace std;
 
 
-extern "C"
+//---------------------------
+// @brief  Ctor
+//---------------------------
+/************************************************************************
+ * \brief constructor
+ ************************************************************************/
+Camera::Camera(const std::string& config_ip_address, unsigned long config_port,
+			   const std::string& SFP1_ip_address, unsigned long SFP1_port,
+			   const std::string& SFP2_ip_address, unsigned long SFP2_port,
+			   const std::string& SFP3_ip_address, unsigned long SFP3_port,
+			   unsigned long timeout_ms)
 {
-#include "mx_util.h"
-#include "mx_record.h"
-#include "mx_image.h"
-#include "mx_area_detector.h"
-#include "mx_driver.h"
-}
-
-#include <cmath>
-
-#define CHECK_MX_STATUS(status, origin) \
-if(status.code != MXE_SUCCESS) { \
-    std::ostringstream err; \
-    err << "Mx returned error code " << (long) status.code << " : " << (const char*) status.message; \
-    throw LIMA_HW_EXC(Error, origin) << " - "<<err.str().c_str(); \  
-}
-
-#define CHECK_MX_RECORD(record, origin) \
-if(record==0) { \
-    throw LIMA_HW_EXC(Error, origin) << "MX RECORD is NULL"; \              
-}
-
-//---------------------------------------------------------------------------------------
-//! Camera::CameraThread::CameraThread()
-//---------------------------------------------------------------------------------------
-Camera::CameraThread::CameraThread(Camera& cam)
-:m_cam(&cam)
-{
-    DEB_MEMBER_FUNCT();
-    DEB_TRACE() << "CameraThread::CameraThread - BEGIN";
-    m_force_stop = false;
-    DEB_TRACE() << "CameraThread::CameraThread - END";
-}
-
-//---------------------------------------------------------------------------------------
-//! Camera::CameraThread::start()
-//---------------------------------------------------------------------------------------
-void Camera::CameraThread::start()
-{
-    DEB_MEMBER_FUNCT();
-    DEB_TRACE() << "CameraThread::start - BEGIN";
-    CmdThread::start();
-    waitStatus(Ready);
-    DEB_TRACE() << "CameraThread::start - END";
-}
-
-//---------------------------------------------------------------------------------------
-//! Camera::CameraThread::init()
-//---------------------------------------------------------------------------------------
-void Camera::CameraThread::init()
-{
-    DEB_MEMBER_FUNCT();
-    DEB_TRACE() << "CameraThread::init - BEGIN";
-    setStatus(Ready);
-    DEB_TRACE() << "CameraThread::init - END";
-}
-
-//---------------------------------------------------------------------------------------
-//! Camera::CameraThread::execCmd()
-//---------------------------------------------------------------------------------------
-void Camera::CameraThread::execCmd(int cmd)
-{
-    DEB_MEMBER_FUNCT();
-    DEB_TRACE() << "CameraThread::execCmd - BEGIN";
-    int status = getStatus();
-    switch(cmd)
-    {
-        case StartAcq:
-            if(status != Ready)
-                throw LIMA_HW_EXC(InvalidValue, "Not Ready to StartAcq");
-            execStartAcq();
-            break;
-        case StartMeasureDark:
-            if(status != Ready)
-                throw LIMA_HW_EXC(InvalidValue, "Not Ready to StartMeasureDark");
-            execStartMeasureDark();
-            break;
-        case StartMeasureFloodField:
-            if(status != Ready)
-                throw LIMA_HW_EXC(InvalidValue, "Not Ready to StartMeasureFloodField");
-            execStartMeasureFloodField();
-            break;
-    }
-    DEB_TRACE() << "CameraThread::execCmd - END";
-}
-
-//---------------------------------------------------------------------------------------
-//! Camera::CameraThread::execStartAcq()
-//---------------------------------------------------------------------------------------
-void Camera::CameraThread::execStartAcq()
-{
-    DEB_MEMBER_FUNCT();
-
-    DEB_TRACE() << "CameraThread::execStartAcq - BEGIN";
-    bool bTraceAlreadyDone = false;
-    mx_status_type mx_status;
-    setStatus(Exposure);
-
-    StdBufferCbMgr& buffer_mgr = m_cam->m_buffer_ctrl_obj.getBuffer();
-
-    // Start acquisition on aviex detector
-    m_cam->_armDetector();
-
-    //because mx library return always 0 in mx_get_last_frame_number() if acquisition is CONTINUOUS !!
-    long initial_fram_num = -1;
-    mx_status = mx_area_detector_get_total_num_frames(m_cam->m_mx_record, &initial_fram_num);
-    CHECK_MX_STATUS(mx_status, "Camera::execStartAcq()");
-    DEB_TRACE() << "initial_fram_num  = " << initial_fram_num;
-
-    /////////////////////////////////////////////////////////////////////////////////////////
-    // Loop while :
-    //				m_nb_frames is not reached OR 
-    //				stop() is requested OR 
-    //				to infinity in "live mode"
-    /////////////////////////////////////////////////////////////////////////////////////////
-    DEB_TRACE() << "CameraThread::execStartAcq - Loop while 'Nb. acquired frames' < " << (m_cam->m_nb_frames) << " ...";
-    bool continueAcq = true;
-    while(continueAcq && (!m_cam->m_nb_frames || m_cam->m_acq_frame_nb < (m_cam->m_nb_frames - 1)))
-    {
-        //Force quit the thread if command stop() is launched by client
-        if(m_force_stop)
-        {
-            //abort the current acquisition et set internal driver state to IDLE
-            continueAcq = false;
-            m_force_stop = false;
-            goto ForceTheStop;
-        }
-
-        //To prevent flooding of traces
-        if(!bTraceAlreadyDone)
-        {
-            DEB_TRACE() << "\n";
-            DEB_TRACE() << "Waiting for the Mx Image Acquisition ...";
-            bTraceAlreadyDone = true;
-        }
-
-        mx_status_type mx_status;
-        long last_frame_num = -1;
-        long total_frame_num = -1;
-
-        //get the total nulmber of frames in order to check if a frame is available !
-        mx_status = mx_area_detector_get_total_num_frames(m_cam->m_mx_record, &total_frame_num);
-        CHECK_MX_STATUS(mx_status, "Camera::execStartAcq()");
-
-        //compute the last frame number
-        last_frame_num = total_frame_num - initial_fram_num - 1;
-
-        //Wait while new Frame is not ready 
-        if(last_frame_num <= m_cam->m_acq_frame_nb)
-        {
-            mx_msleep(1); //sleep 1ms
-            continue;
-        }
-
-        DEB_TRACE() << "\t- total_frame_num  = " << total_frame_num;
-        DEB_TRACE() << "\t- last_frame_num  = " << last_frame_num;
-
-        //New image(s) is ready
-        while(last_frame_num > m_cam->m_acq_frame_nb)
-        {
-            int current_frame_nb = m_cam->m_acq_frame_nb + 1;
-            //Prepare frame Lima Ptr ...
-            bTraceAlreadyDone = false;
-            DEB_TRACE() << "\t- Prepare the Lima Frame ptr - " << DEB_VAR1(current_frame_nb);
-            setStatus(Readout);
-            void *ptr = buffer_mgr.getFrameBufferPtr(current_frame_nb);
-
-            //Prepare frame Mx Ptr ...
-            DEB_TRACE() << "\t- Prepare the Mx Frame ptr - " << DEB_VAR1(current_frame_nb);
-            MX_IMAGE_FRAME *image_frame = NULL;
-
-            //Send corrections flags
-            DEB_TRACE() << "\t- Send the list of corrections flags to Mx library - correction_flags = " << m_cam->m_correction_flags;
-            mx_area_detector_set_correction_flags(m_cam->m_mx_record, m_cam->m_correction_flags);
-
-            //Get the last image
-            DEB_TRACE() << "\t- Get the last Frame From Mx - " << DEB_VAR1(current_frame_nb);
-            //utility function that make : setup_frame() + readout_frame() + correct_frame() + transfer_frame().
-            MX_AREA_DETECTOR* ad = (MX_AREA_DETECTOR*) (m_cam->m_mx_record->record_class_struct);
-            mx_status = mx_area_detector_get_frame(m_cam->m_mx_record, current_frame_nb, &(ad->image_frame));
-            CHECK_MX_STATUS(mx_status, "Camera::execStartAcq()");
-            image_frame = ad->image_frame;
-
-            //compute the timestamp of current image
-            DEB_TRACE() << "\t- Compute the Timestamp for the image - " << DEB_VAR1(current_frame_nb);
-            double timestamp = m_cam->computeTimestamp(image_frame, current_frame_nb);
-
-            //copy from the Mx buffer to the Lima buffer
-            DEB_TRACE() << "\t- Copy Frame From Mx Ptr into the Lima ptr :";
-            size_t nb_bytes_to_copy = m_cam->m_frame_size.getWidth() * m_cam->m_frame_size.getHeight() * sizeof (unsigned short);
-
-            size_t nb_bytes_copied;
-            mx_status = mx_image_copy_1d_pixel_array(image_frame,
-                                                     (unsigned short *) ptr,
-                                                     nb_bytes_to_copy,
-                                                     &nb_bytes_copied);
-            CHECK_MX_STATUS(mx_status, "Camera::execStartAcq()");
-
-            DEB_TRACE() << "\t- Timestamp  = " << std::fixed << timestamp << " (s)";
-            DEB_TRACE() << "\t- Frame size  = " << m_cam->m_frame_size;
-            DEB_TRACE() << "\t- NB. Bytes to Copy = " << nb_bytes_to_copy;
-            DEB_TRACE() << "\t- NB. Copied Bytes  = " << nb_bytes_copied;
-
-
-            Timestamp computed_timestamp(timestamp);
-            buffer_mgr.setStartTimestamp(computed_timestamp/*Timestamp::now()*/);
-
-            //Push the image buffer through Lima 
-            DEB_TRACE() << "\t- Declare a Lima new Frame Ready (" << current_frame_nb << ")";
-            HwFrameInfoType frame_info;
-            frame_info.acq_frame_nb = current_frame_nb;
-            frame_info.frame_timestamp = computed_timestamp;
-            buffer_mgr.newFrameReady(frame_info);
-            m_cam->m_acq_frame_nb = current_frame_nb;
-            DEB_TRACE() << "\n";
-        }
-
-    } /* End while */
-
-ForceTheStop: {
-               // stop acquisition
-               DEB_TRACE() << "\n";
-               DEB_TRACE() << "Stop the Acquisition.";
-               CHECK_MX_RECORD(m_cam->m_mx_record, "Camera::execStartAcq()")
-
-               mx_status = mx_area_detector_stop(m_cam->m_mx_record);
-               CHECK_MX_STATUS(mx_status, "Camera::execStartAcq()")
-
-               setStatus(Ready);
-               DEB_TRACE() << "CameraThread::execStartAcq - END";
-    }
-}
-
-
-//---------------------------------------------------------------------------------------
-//! Camera::CameraThread::execStartMeasureDark()
-//---------------------------------------------------------------------------------------
-void Camera::CameraThread::execStartMeasureDark()
-{
-
-    DEB_MEMBER_FUNCT();
-
-    DEB_TRACE() << "CameraThread::execStartMeasureDark - BEGIN";
-    mx_status_type mx_status;
-    setStatus(Exposure);
-
-    StdBufferCbMgr& buffer_mgr = m_cam->m_buffer_ctrl_obj.getBuffer();
-    buffer_mgr.setStartTimestamp(Timestamp::now());
-
-    /////////////////////////////////////////////////////////////////////////////////////////
-    // Loop while detector is busy : i.e acuiring Dark and made some corrections
-    /////////////////////////////////////////////////////////////////////////////////////////
-    DEB_TRACE() << "CameraThread::execStartMeasureDark - Loop while 'Detector is Busy ...";
-    DEB_TRACE() << "Waiting for the Mx Image Acquisition ...";
-    while(m_cam->isBusy())//	See if the acqusition OR computation is still in progress.
-    {
-        //Force quit the thread if command stop() is launched by client
-        if(m_force_stop)
-        {
-            //abort the current acquisition et set internal driver state to IDLE
-            m_force_stop = false;
-            goto ForceTheStop;
-        }
-
-        /* Sleep for a millisecond */
-        mx_msleep(1);
-    }
-
-    {
-        //New image Dark is ready
-        DEB_TRACE() << "\t- Prepare the Lima Frame ptr - " << "The unique et only frame in this Mode";
-        setStatus(Readout);
-        void *ptr = buffer_mgr.getFrameBufferPtr((m_cam->m_nb_frames - 1));
-
-        // -> in case of DARK,  we get the real image from Mx Library (setup_frame+transfer_frame) and publish it through newFrameReady()
-
-        //Prepare frame Mx Ptr ...
-        DEB_TRACE() << "\t- Prepare the Mx Frame ptr - " << "The unique et only frame in this Mode";
-        MX_IMAGE_FRAME *image_frame = NULL;
-
-        //Send corrections flags
-        DEB_TRACE() << "\t- Send the list of corrections flags to Mx library - correction_flags = " << m_cam->m_correction_flags;
-        mx_area_detector_set_correction_flags(m_cam->m_mx_record, m_cam->m_correction_flags);
-
-        // Get the DARK image
-        mx_status = mx_area_detector_setup_frame(m_cam->m_mx_record, &image_frame);
-        CHECK_MX_STATUS(mx_status, "Camera::execStartMeasureDark()");
-
-        mx_status = mx_area_detector_transfer_frame(m_cam->m_mx_record, MXFT_AD_DARK_CURRENT_FRAME, image_frame);
-        CHECK_MX_STATUS(mx_status, "Camera::execStartMeasureDark()");
-
-        //copy from the Mx buffer to the Lima buffer
-        DEB_TRACE() << "\t- Copy Frame From Mx Ptr into the Lima ptr :";
-        size_t nb_bytes_to_copy = m_cam->m_frame_size.getWidth() * m_cam->m_frame_size.getHeight() * sizeof (unsigned short);
-
-        size_t nb_bytes_copied;
-        mx_status = mx_image_copy_1d_pixel_array(image_frame,
-                                                 (unsigned short *) ptr,
-                                                 nb_bytes_to_copy,
-                                                 &nb_bytes_copied);
-        CHECK_MX_STATUS(mx_status, "Camera::execStartMeasureDark()");
-
-        DEB_TRACE() << "\t- Frame size  = " << m_cam->m_frame_size;
-        DEB_TRACE() << "\t- NB. Bytes to Copy = " << nb_bytes_to_copy;
-        DEB_TRACE() << "\t- NB. Copied Bytes  = " << nb_bytes_copied;
-
-
-        buffer_mgr.setStartTimestamp(Timestamp::now());
-
-        //@@TODO Push m_nb_frame images buffer through Lima, in fact we need to put ONLY ONE DARK image : but Lima don't allow that !
-        for(int i = 0; i < m_cam->m_nb_frames; i++)
-        {
-            DEB_TRACE() << "\t- Declare a Lima new Frame Ready (" << i << ")";
-            HwFrameInfoType frame_info;
-            frame_info.acq_frame_nb = i;
-            buffer_mgr.newFrameReady(frame_info);
-            m_cam->m_acq_frame_nb = i;
-        }
-    }
-
-ForceTheStop: {
-               // stop acquisition
-               DEB_TRACE() << "\n";
-               DEB_TRACE() << "Stop the Acquisition.";
-               CHECK_MX_RECORD(m_cam->m_mx_record, "Camera::execStartMeasureDark()")
-
-               mx_status = mx_area_detector_stop(m_cam->m_mx_record);
-               CHECK_MX_STATUS(mx_status, "Camera::execStartMeasureDark()")
-
-               setStatus(Ready);
-               DEB_TRACE() << "CameraThread::execStartMeasureDark - END";
-    }
-}
-
-//---------------------------------------------------------------------------------------
-//! Camera::CameraThread::execStartMeasureFloodField()
-//---------------------------------------------------------------------------------------
-void Camera::CameraThread::execStartMeasureFloodField()
-{
-
-    DEB_MEMBER_FUNCT();
-
-    DEB_TRACE() << "CameraThread::execStartMeasureFloodField - BEGIN";
-    mx_status_type mx_status;
-    setStatus(Exposure);
-
-    StdBufferCbMgr& buffer_mgr = m_cam->m_buffer_ctrl_obj.getBuffer();
-    buffer_mgr.setStartTimestamp(Timestamp::now());
-
-    /////////////////////////////////////////////////////////////////////////////////////////
-    // Loop while detector is busy : i.e acquiring Flood Field and made some corrections
-    /////////////////////////////////////////////////////////////////////////////////////////
-    DEB_TRACE() << "CameraThread::execStartMeasureFloodField - Loop while 'Detector is Busy ...";
-    DEB_TRACE() << "Waiting for the Mx Image Acquisition ...";
-    while(m_cam->isBusy())//	See if the acquisition OR computation is still in progress.
-    {
-        //Force quit the thread if command stop() is launched by client
-        if(m_force_stop)
-        {
-            //abort the current acquisition et set internal driver state to IDLE
-            m_force_stop = false;
-            goto ForceTheStop;
-        }
-
-        /* Sleep for a millisecond */
-        mx_msleep(1);
-    }
-
-    {
-        DEB_TRACE() << "\t- Prepare the Lima Frame ptr - " << "The unique et only frame in this Mode";
-        setStatus(Readout);
-        void *ptr = buffer_mgr.getFrameBufferPtr((m_cam->m_nb_frames - 1));
-
-        //Prepare frame Mx Ptr ...
-        DEB_TRACE() << "\t- Prepare the Mx Frame ptr - " << "The unique et only frame in this Mode";
-        MX_IMAGE_FRAME *image_frame = NULL;
-
-        // Because, Mx library does not allow transfer_frame for FLOOD_FIELD correctly (size = 4096 instead of 1024 in binnig 4)		
-        // -> in case of FLOOD, we take a black image (*ptr initialized with 0) and publish it through newFrameReady()
-        //Send corrections flags
-        DEB_TRACE() << "\t- Send the list of corrections flags to Mx library - correction_flags = " << m_cam->m_correction_flags;
-        mx_area_detector_set_correction_flags(m_cam->m_mx_record, m_cam->m_correction_flags);
-
-        // Get the DARK/FLOOD image
-        mx_status = mx_area_detector_setup_frame(m_cam->m_mx_record, &image_frame);
-        CHECK_MX_STATUS(mx_status, "Camera::execStartMeasureFloodField()");
-
-        mx_status = mx_area_detector_transfer_frame(m_cam->m_mx_record, MXFT_AD_DARK_CURRENT_FRAME, image_frame);
-        CHECK_MX_STATUS(mx_status, "Camera::execStartMeasureFloodField()");
-
-        buffer_mgr.setStartTimestamp(Timestamp::now());
-
-        //@@TODO Push m_nb_frame images buffer through Lima, in fact we need to put ONLY ONE DARK image : but Lima don't allow that !
-        for(int i = 0; i < m_cam->m_nb_frames; i++)
-        {
-            DEB_TRACE() << "\t- Declare a Lima new Frame Ready (" << i << ")";
-            HwFrameInfoType frame_info;
-            frame_info.acq_frame_nb = i;
-            buffer_mgr.newFrameReady(frame_info);
-            m_cam->m_acq_frame_nb = i;
-        }
-    }
-
-ForceTheStop: {
-               // stop acquisition
-               DEB_TRACE() << "\n";
-               DEB_TRACE() << "Stop the Acquisition.";
-               CHECK_MX_RECORD(m_cam->m_mx_record, "Camera::execStartMeasureFloodField()")
-
-               mx_status = mx_area_detector_stop(m_cam->m_mx_record);
-               CHECK_MX_STATUS(mx_status, "Camera::execStartMeasureFloodField()")
-
-               setStatus(Ready);
-               DEB_TRACE() << "CameraThread::execStartMeasureFloodField - END";
-    }
-}
-
-//---------------------------------------------------------------------------------------
-//! Camera::CameraThread::getNbHwAcquiredFrames()
-//---------------------------------------------------------------------------------------
-int Camera::CameraThread::getNbHwAcquiredFrames()
-{
-    return (m_cam->m_acq_frame_nb == -1) ? 0 : (m_cam->m_acq_frame_nb + 1);
-}
-
-//---------------------------------------------------------------------------------------
-//! Camera::Camera()
-//---------------------------------------------------------------------------------------
-Camera::Camera(const std::string& camName, const std::string& databaseFile):
-m_thread(*this),
-m_name(camName),
-m_database_file_name(databaseFile),
-m_trigger_mode(0),
-m_max_width(4096),
-m_max_height(4096),
-m_depth(16),
-m_nb_frames(1),
-m_mx_record(0),
-m_status(""),
-m_frame_size(4096, 4096),
-m_acq_frame_nb(-1),
-m_state(Ready),
-m_exposure_time(1.0),
-m_exposure_multiplier(1.0),
-m_latency_time(1.0),
-m_gap_multiplier(1.0),
-m_initial_delay_time(0.0),
-m_readout_delay_time(0.0),
-m_ccd_readout_time(1.0),
-m_readout_speed(false),
-m_correction_flags(0),
-m_acq_mode_name("ONESHOT"),
-m_binning_x(1),
-m_binning_y(1)
-{
-    DEB_CONSTRUCTOR();
-    DEB_TRACE() << "Camera::Camera";
-
-    //Open Mx database/Mx Record/ ...
-    _open();
-    m_thread.start();
-
-}
-
-//---------------------------------------------------------------------------------------
-//! Camera::~Camera()
-//---------------------------------------------------------------------------------------
-Camera::~Camera()
-{
-    DEB_DESTRUCTOR();
-    DEB_TRACE() << "Camera::~Camera";
-    //Close Mx database/Mx Record/ ...
-    _close();
-}
-
-//---------------------------------------------------------------------------------------
-//! Camera::getStatus()
-//---------------------------------------------------------------------------------------
-Camera::Status Camera::getStatus()
-{
-    DEB_MEMBER_FUNCT();
-
-    int thread_status = m_thread.getStatus();
-
-    DEB_RETURN() << DEB_VAR1(thread_status);
-
-    switch(thread_status)
-    {
-        case CameraThread::Ready:
-            return Camera::Ready;
-        case CameraThread::Exposure:
-            return Camera::Exposure;
-        case CameraThread::Readout:
-            return Camera::Readout;
-        case CameraThread::Latency:
-            return Camera::Latency;
-        default:
-            throw LIMA_HW_EXC(Error, "Invalid thread status");
-    }
-}
-
-//---------------------------------------------------------------------------------------
-//! Camera::setNbFrames()
-//---------------------------------------------------------------------------------------
-void Camera::setNbFrames(int nb_frames)
-{
-    DEB_MEMBER_FUNCT();
-    DEB_TRACE() << "Camera::setNbFrames - " << DEB_VAR1(nb_frames);
-    if(nb_frames < 0)
-        throw LIMA_HW_EXC(InvalidValue, "Invalid nb of frames");
-
-    m_nb_frames = nb_frames;
-}
-
-//---------------------------------------------------------------------------------------
-//! Camera::getNbFrames()
-//---------------------------------------------------------------------------------------
-void Camera::getNbFrames(int& nb_frames)
-{
-    DEB_MEMBER_FUNCT();
-    //DEB_TRACE() << "Camera::getNbFrames";
-
-    nb_frames = m_nb_frames;
-}
-
-//---------------------------------------------------------------------------------------
-//! Camera::CameraThread::getNbHwAcquiredFrames()
-//---------------------------------------------------------------------------------------
-int Camera::getNbHwAcquiredFrames()
-{
-    DEB_MEMBER_FUNCT();
-    //DEB_TRACE()<<"Camera::getNbHwAcquiredFrames";			
-    return (m_acq_frame_nb == -1) ? 0 : (m_acq_frame_nb + 1);
-}
-
-//---------------------------------------------------------------------------------------
-//! Camera::setTrigMode()
-//---------------------------------------------------------------------------------------
-void Camera::setTrigMode(TrigMode mode)
-{
-    DEB_MEMBER_FUNCT();
-    DEB_TRACE() << "Camera::setTrigMode - " << DEB_VAR1(mode);
-    DEB_PARAM() << DEB_VAR1(mode);
-
-    CHECK_MX_RECORD(m_mx_record, "Camera::setTrigMode()");
-    mx_status_type mx_status;
-    switch(mode)
-    {
-        case IntTrig:
-            m_trigger_mode = 0x1; // 0x1 (int. trigger)
-            break;
-
-        case ExtTrigSingle:
-            m_trigger_mode = 0x2; // 0x2  (ext. trigger)                
-            break;
-
-        default:
-            THROW_HW_ERROR(Error) << "Cannot change the Trigger Mode of the camera, this mode is not managed !";
-            break;
-    }
-}
-
-//---------------------------------------------------------------------------------------
-//! Camera::setTrigMode()
-//---------------------------------------------------------------------------------------
-void Camera::getTrigMode(TrigMode& mode)
-{
-    DEB_MEMBER_FUNCT();
-    //DEB_TRACE()<<"Camera::getTrigMode";
-    switch(m_trigger_mode)
-    {
-        case 0x1: //(int. trigger)
-            mode = IntTrig;
-            break;
-
-        case 0x2: //(ext. trigger)         
-            mode = ExtTrigSingle;
-            break;
-    }
-}
-//---------------------------------------------------------------------------------------
-//! Camera::prepareAcq()
-//---------------------------------------------------------------------------------------
-void Camera::prepareAcq()
-{
-    DEB_MEMBER_FUNCT();
-    try
-    {
-        CHECK_MX_RECORD(m_mx_record, "Camera::prepareAcq()");
-        mx_status_type mx_status;
-
-        // dh_readout_delay_time
-        DEB_TRACE() << "Set register 'dh_readout_delay_time' = " << m_readout_delay_time << " (s)";
-        mx_status = mx_area_detector_set_register(m_mx_record, "dh_readout_delay_time", m_readout_delay_time * 1E5);//unit for this paraù is in 10µs in the Mx library
-        CHECK_MX_STATUS(mx_status, "Camera::prepareAcq()");
-
-        // dh_initial_delay_time
-        DEB_TRACE() << "Set register 'dh_initial_delay_time' = " << m_initial_delay_time << " (s)";
-        mx_status = mx_area_detector_set_register(m_mx_record, "dh_initial_delay_time", m_initial_delay_time * 1E5);//unit for this paraù is in 10µs in the Mx library
-        CHECK_MX_STATUS(mx_status, "Camera::prepareAcq()");
-
-        // dh_readout_speed
-        DEB_TRACE() << "Set register 'dh_readout_speed' = " << m_readout_speed;
-        mx_status = mx_area_detector_set_register(m_mx_record, "dh_readout_speed", m_readout_speed);
-        CHECK_MX_STATUS(mx_status, "Camera::prepareAcq()");
-
-        /*
-        mx_status = mx_area_detector_set_binsize(m_mx_record, xbin, ybin); 
-        CHECK_MX_STATUS(mx_status, "Camera::prepareAcq()");
-         */
-
-        // ccd_readout_time
-        //DEB_TRACE() << "Get CCD readout time .";
-        mx_status = mx_area_detector_get_detector_readout_time(m_mx_record, &m_ccd_readout_time);
-        CHECK_MX_STATUS(mx_status, "Camera::prepareAcq()");
-        DEB_TRACE() << "CCD Readout Time = " << m_ccd_readout_time << " (s)";
-
-        DEB_TRACE() << "Get the Frame Size.";
-        long xsize = 0, ysize = 0;
-        mx_status = mx_area_detector_get_framesize(m_mx_record, &xsize, &ysize);
-        CHECK_MX_STATUS(mx_status, "Camera::prepareAcq()");
-        m_frame_size = Size(xsize, ysize);
-
-        DEB_TRACE() << "Prepare the the acquisition according to the acquisition mode.";
-        if(m_acq_mode_name == "ONESHOT")
-        {
-            DEB_TRACE() << "Acquisition mode : ONESHOT";
-            m_status = "Prepare Acquisition mode : ONESHOT";
-            setNbFrames(1); //@@@@ TODO Check this : force nbFrames to 1
-            mx_status = mx_area_detector_set_one_shot_mode(m_mx_record,
-                                                           m_exposure_time);
-            CHECK_MX_STATUS(mx_status, "Camera::prepareAcq()")
-        }
-        else if(m_acq_mode_name == "CONTINUOUS")
-        {
-            DEB_TRACE() << "Acquisition mode : CONTINUOUS";
-            m_status = "Prepare Acquisition mode : CONTINUOUS";
-            mx_status = mx_area_detector_set_continuous_mode(m_mx_record,
-                                                             m_exposure_time);
-            CHECK_MX_STATUS(mx_status, "Camera::prepareAcq()")
-        }
-        else if(m_acq_mode_name == "MULTIFRAME")
-        {
-            DEB_TRACE() << "Acquisition mode : MULTIFRAME.";
-            double frame_time = m_exposure_time + m_latency_time - m_readout_delay_time;
-            m_status = "Prepare Acquisition mode : MULTIFRAME";
-            mx_status = mx_area_detector_set_multiframe_mode(m_mx_record,
-                                                             m_nb_frames,
-                                                             m_exposure_time,
-                                                             frame_time);
-            CHECK_MX_STATUS(mx_status, "Camera::prepareAcq()")
-        }
-        else if(m_acq_mode_name == "GEOMETRICAL")
-        {
-            DEB_TRACE() << "Acquisition mode : GEOMETRICAL";
-            double frame_time = m_exposure_time + m_latency_time - m_readout_delay_time;
-            m_status = "Prepare Acquisition mode : GEOMETRICAL";
-            mx_status = mx_area_detector_set_geometrical_mode(m_mx_record,
-                                                              m_nb_frames,
-                                                              m_exposure_time,
-                                                              frame_time,
-                                                              m_exposure_multiplier,
-                                                              m_gap_multiplier);
-            CHECK_MX_STATUS(mx_status, "Camera::prepareAcq()")
-        }
-        else if(m_acq_mode_name == "MEASURE_DARK")
-        {
-            DEB_TRACE() << "Acquisition mode : MEASURE_DARK";
-            m_status = "Prepare Acquisition mode : MEASURE_DARK";
-            mx_status = mx_area_detector_measure_dark_current_frame(m_mx_record,
-                                                                    m_exposure_time,
-                                                                    m_nb_frames);
-            CHECK_MX_STATUS(mx_status, "Camera::prepareAcq()")
-        }
-        else if(m_acq_mode_name == "MEASURE_FLOOD_FIELD")
-        {
-            DEB_TRACE() << "Acquisition mode : MEASURE_FLOOD_FIELD";
-            m_status = "Prepare Acquisition mode : MEASURE_FLOOD_FIELD";
-            mx_status = mx_area_detector_measure_flood_field_frame(m_mx_record,
-                                                                   m_exposure_time,
-                                                                   m_nb_frames);
-            CHECK_MX_STATUS(mx_status, "Camera::prepareAcq()")
-        }
-
-        // set the trigger mode here, because Mx requires that it be done once the user has been defined acquisition mode
-        mx_status = mx_area_detector_set_trigger_mode(m_mx_record, m_trigger_mode);
-        CHECK_MX_STATUS(mx_status, "Camera::prepareAcq()");
-
-    }
-    catch(std::exception& e)
-    {
-        DEB_TRACE() << "Allocating memory is FAIL.";
-        THROW_HW_ERROR(Error) << e.what();
-    }
-}
-
-//---------------------------------------------------------------------------------------
-//! Camera::startAcq()
-//---------------------------------------------------------------------------------------
-void Camera::startAcq()
-{
-    DEB_MEMBER_FUNCT();
-    m_thread.m_force_stop = false;
-    m_acq_frame_nb = -1;
-    m_status = "Start Acquisition ...";
-
-    if(m_acq_mode_name == "MEASURE_DARK")
-        m_thread.sendCmd(CameraThread::StartMeasureDark);
-    else if(m_acq_mode_name == "MEASURE_FLOOD_FIELD")
-        m_thread.sendCmd(CameraThread::StartMeasureFloodField);
-    else
-        m_thread.sendCmd(CameraThread::StartAcq);
-
-    m_thread.waitNotStatus(CameraThread::Ready);
-}
-
-//---------------------------------------------------------------------------------------
-//! Camera::stopAcq()
-//---------------------------------------------------------------------------------------
-void Camera::stopAcq()
-{
-    DEB_MEMBER_FUNCT();
-
-    m_thread.m_force_stop = true;
-
-    m_status = "Stop Acquisition ...";
-    m_thread.sendCmd(CameraThread::StopAcq);
-    m_thread.waitStatus(CameraThread::Ready);
-}
-
-//---------------------------------------------------------------------------------------
-//! Camera::isBusy()
-//---------------------------------------------------------------------------------------
-bool Camera::isBusy()
-{
-    CHECK_MX_RECORD(m_mx_record, "Camera::isBusy()");
-    mx_status_type mx_status;
-    unsigned long status_flag;
-    mx_status = mx_area_detector_get_status(m_mx_record, &status_flag);
-    CHECK_MX_STATUS(mx_status, "Camera::isBusy()");
-    if(status_flag/* & MXSF_AD_IS_BUSY*/)
-    {
-        return true;
-    }
-    return false;
-}
-
-//---------------------------------------------------------------------------------------
-//! Camera::getExpTime()
-//---------------------------------------------------------------------------------------
-void Camera::getExpTime(double& exp_time)
-{
-    DEB_MEMBER_FUNCT();
-    //DEB_TRACE() << "Camera::getExpTime";
-    exp_time = m_exposure_time;
-}
-
-//---------------------------------------------------------------------------------------
-//! Camera::setExpTime()
-//---------------------------------------------------------------------------------------
-void Camera::setExpTime(double exp_time)
-{
-    DEB_MEMBER_FUNCT();
-    DEB_TRACE() << "Camera::setExpTime - " << DEB_VAR1(exp_time) << " (s)";
-
-    m_exposure_time = exp_time; //default detector unit is sec	
-}
-
-//---------------------------------------------------------------------------------------
-//! Camera::getExpMultiplier()
-//---------------------------------------------------------------------------------------
-void Camera::getExpMultiplier(double& exp_mult)
-{
-    DEB_MEMBER_FUNCT();
-    //DEB_TRACE() << "Camera::getExpMultiplier";
-    exp_mult = m_exposure_multiplier;
-}
-
-//---------------------------------------------------------------------------------------
-//! Camera::setExpMultiplier()
-//---------------------------------------------------------------------------------------	
-void Camera::setExpMultiplier(double exp_mult)
-{
-    DEB_MEMBER_FUNCT();
-    DEB_TRACE() << "Camera::setExpMultiplier - " << DEB_VAR1(exp_mult);
-
-    m_exposure_multiplier = exp_mult;
-}
-
-//---------------------------------------------------------------------------------------
-//! Camera::getLatencyTime()
-//---------------------------------------------------------------------------------------		
-void Camera::getLatencyTime(double& latency_time)
-{
-    DEB_MEMBER_FUNCT();
-    //DEB_TRACE() << "Camera::getLatencyTime";
-    latency_time = m_latency_time;
-}
-
-//---------------------------------------------------------------------------------------
-//! Camera::setLatencyTime()
-//---------------------------------------------------------------------------------------		
-void Camera::setLatencyTime(double latency_time)
-{
-    DEB_MEMBER_FUNCT();
-    DEB_TRACE() << "Camera::setLatencyTime - " << DEB_VAR1(latency_time) << " (s)";
-
-    m_latency_time = latency_time; //default detector unit is in sec	
-}
-
-//---------------------------------------------------------------------------------------
-//! Camera::getGapMultiplier()
-//---------------------------------------------------------------------------------------		
-void Camera::getGapMultiplier(double& gap_mult)
-{
-    DEB_MEMBER_FUNCT();
-    //DEB_TRACE() << "Camera::getGapMultiplier";
-    int stored_gap_multiplier = (m_gap_multiplier - 1.0) * 256;
-    double effective_gap_multiplier = (stored_gap_multiplier / 256.0) + 1.0;
-    gap_mult = effective_gap_multiplier;
-}
-
-//---------------------------------------------------------------------------------------
-//! Camera::setGapMultiplier()
-//---------------------------------------------------------------------------------------		
-void Camera::setGapMultiplier(double gap_mult)
-{
-    DEB_MEMBER_FUNCT();
-    DEB_TRACE() << "Camera::setGapMultiplier - " << DEB_VAR1(gap_mult);
-
-    m_gap_multiplier = gap_mult;
-}
-
-//---------------------------------------------------------------------------------------
-//! Camera::getReadoutDelayTime()
-//---------------------------------------------------------------------------------------		
-void Camera::getReadoutDelayTime(double& readout_delay)
-{
-    DEB_MEMBER_FUNCT();
-    //DEB_TRACE() << "Camera::getReadoutDelayTime";
-    readout_delay = m_readout_delay_time;
-}
-
-//---------------------------------------------------------------------------------------
-//! Camera::setReadoutDelayTime()
-//---------------------------------------------------------------------------------------		
-void Camera::setReadoutDelayTime(double readout_delay)
-{
-    DEB_MEMBER_FUNCT();
-    DEB_TRACE() << "Camera::setReadoutDelayTime - " << DEB_VAR1(readout_delay) << " (s)";
-
-    m_readout_delay_time = readout_delay;
-}
-
-
-//---------------------------------------------------------------------------------------
-//! Camera::getInitialDelayTime()
-//---------------------------------------------------------------------------------------		
-void Camera::getInitialDelayTime(double& initial_delay)
-{
-    DEB_MEMBER_FUNCT();
-    //DEB_TRACE() << "Camera::getInitialDelayTime";
-    initial_delay = m_initial_delay_time;
-}
-
-//---------------------------------------------------------------------------------------
-//! Camera::setInitialDelayTime()
-//---------------------------------------------------------------------------------------		
-void Camera::setInitialDelayTime(double initial_delay)
-{
-    DEB_MEMBER_FUNCT();
-    DEB_TRACE() << "Camera::setInitialDelayTime - " << DEB_VAR1(initial_delay) << " (s)";
-    m_initial_delay_time = initial_delay;
-}
-
-//---------------------------------------------------------------------------------------
-//! Camera::getReadoutSpeed()
-//---------------------------------------------------------------------------------------		
-void Camera::getReadoutSpeed(bool& readout_speed)
-{
-    DEB_MEMBER_FUNCT();
-    //DEB_TRACE() << "Camera::getReadoutSpeed";
-    readout_speed = m_readout_speed;
-}
-
-//---------------------------------------------------------------------------------------
-//! Camera::setReadoutSpeed()
-//---------------------------------------------------------------------------------------		
-void Camera::setReadoutSpeed(bool readout_speed)
-{
-    DEB_MEMBER_FUNCT();
-    DEB_TRACE() << "Camera::setReadoutSpeed - " << DEB_VAR1(readout_speed);
-
-    m_readout_speed = readout_speed;
-}
-
-
-//---------------------------------------------------------------------------------------
-//! Camera::setCorrectionFlags()
-//---------------------------------------------------------------------------------------		
-void Camera::setCorrectionFlags(unsigned long flags)
-{
-    DEB_MEMBER_FUNCT();
-    DEB_TRACE() << "Camera::setCorrectionFlags - 0x" << std::uppercase << std::hex << flags << std::dec;
-    m_correction_flags = flags;
-
-}
-
-//---------------------------------------------------------------------------------------
-//! Camera::getMxLibraryVersion()
-//---------------------------------------------------------------------------------------
-void Camera::getMxLibraryVersion(std::string& version)
-{
-    DEB_MEMBER_FUNCT();
-    version = mx_get_version_string();
-}
-
-//---------------------------------------------------------------------------------------
-//! Camera::getInternalAcqMode()
-//---------------------------------------------------------------------------------------
-void Camera::getInternalAcqMode(std::string& acq_mode)
-{
-    DEB_MEMBER_FUNCT();
-    acq_mode = m_acq_mode_name;
-}
-
-//---------------------------------------------------------------------------------------
-//! Camera::setInternalAcqMode()
-//---------------------------------------------------------------------------------------
-void Camera::setInternalAcqMode(const std::string& mode)
-{
-    DEB_MEMBER_FUNCT();
-    DEB_TRACE() << "Camera::setInternalAcqMode - " << DEB_VAR1(mode);
-
-    if(mode == "ONESHOT" ||
-       mode == "CONTINUOUS" ||
-       mode == "MULTIFRAME" ||
-       mode == "GEOMETRICAL" ||
-       mode == "MEASURE_DARK" ||
-       mode == "MEASURE_FLOOD_FIELD")
-    {
-        m_acq_mode_name = mode;
-    }
-    else
-    {
-        THROW_HW_ERROR(Error) << "Incorrect Internal Acquisition mode !";
-    }
-}
-
-//---------------------------------------------------------------------------------------
-//! Camera::getDetectorModel()
-//---------------------------------------------------------------------------------------
-void Camera::getDetectorModel(std::string& model)
-{
-    DEB_MEMBER_FUNCT();
-    DEB_RETURN() << "PCCD-170170";
-    model = "PCCD-170170";
-}
-
-//---------------------------------------------------------------------------------------
-//! Camera::getMaxWidth()
-//---------------------------------------------------------------------------------------
-unsigned short Camera::getMaxWidth()
-{
-    DEB_MEMBER_FUNCT();
-    DEB_RETURN() << DEB_VAR1(m_max_width);
-    return m_max_width;
-}
-
-//---------------------------------------------------------------------------------------
-//! Camera::getMaxHeight()
-//---------------------------------------------------------------------------------------
-unsigned short Camera::getMaxHeight()
-{
-    DEB_MEMBER_FUNCT();
-    DEB_RETURN() << DEB_VAR1(m_max_height);
-    return m_max_height;
+	DEB_CONSTRUCTOR();
+
+	m_detector_type = "undefined";
+	m_detector_model = "undefined";
+	m_detector_firmware_version = "undefined";
+	m_detector_software_version = "undefined";
+	m_module_firmware_version = "undefined";
+	m_depth = 16;
+	m_acq_frame_nb = 0;
+	try
+	{
+		ufxclib::T_UfxcLibCnx tcpCnx, SFPpCnx1, SFPpCnx2, SFPpCnx3;
+		tcpCnx.ip_address = config_ip_address;
+		tcpCnx.configuration_port = config_port;
+		tcpCnx.socket_timeout_ms = timeout_ms;
+		tcpCnx.protocol = ufxclib::T_Protocol::TCP;
+
+		SFPpCnx1.ip_address = SFP1_ip_address;
+		SFPpCnx1.configuration_port = SFP1_port;
+		SFPpCnx1.socket_timeout_ms = timeout_ms;
+		SFPpCnx1.protocol = ufxclib::T_Protocol::UDP;
+
+		SFPpCnx2.ip_address = SFP2_ip_address;
+		SFPpCnx2.configuration_port = SFP2_port;
+		SFPpCnx2.socket_timeout_ms = timeout_ms;
+		SFPpCnx2.protocol = ufxclib::T_Protocol::UDP;
+
+		SFPpCnx3.ip_address = SFP3_ip_address;
+		SFPpCnx3.configuration_port = SFP3_port;
+		SFPpCnx3.socket_timeout_ms = timeout_ms;
+		SFPpCnx3.protocol = ufxclib::T_Protocol::UDP;
+
+		//- prepare the registers
+		SetHardwareRegisters();
+
+		//- create the main ufxc object
+		m_ufxc_interface = new ufxclib::UFXCInterface();
+
+		//- connect to the DAQ/Detector
+		m_ufxc_interface->open_connection(tcpCnx, SFPpCnx1, SFPpCnx2, SFPpCnx3);
+
+		//- set the registers to the DAQ
+		m_ufxc_interface->get_config_acquisition_obj()->set_acquisition_registers_names(m_acquisition_registers);
+		m_ufxc_interface->get_config_detector_obj()->set_detector_registers_names(m_detector_registers);
+		m_ufxc_interface->get_daq_monitoring_obj()->set_monitoring_registers_names(m_monitor_registers);
+
+		//soft_reset() once when init device
+		////m_ufxc_interface->get_config_acquisition_obj()->soft_reset();
+		//fix the acquisition mode
+		m_ufxc_interface->get_config_acquisition_obj()->set_acq_mode(ufxclib::T_Mode::software_raw);//pump_and_probe software_raw		
+	}
+	catch(const ufxclib::Exception& ue)
+	{
+		std::ostringstream err_msg;
+		err_msg << "Error in Camera::Camera() :"
+		 << "\nreason : "
+		 << ue.errors[0].reason
+		 << "\ndesc : "
+		 << ue.errors[0].desc
+		 << "\norigin : "
+		 << ue.errors[0].origin
+		 << std::endl;
+		DEB_ERROR() << err_msg;
+		THROW_HW_FATAL(ErrorType::Error) << err_msg.str();
+	}
+	catch(...)
+	{
+		std::ostringstream err_msg;
+		err_msg << "Error in Camera::Camera() : Unknown error" << std::endl;
+		DEB_ERROR() << err_msg;
+		THROW_HW_FATAL(ErrorType::Error) << err_msg;
+	}
+
+	m_acq_thread = new AcqThread(*this);
+	m_acq_thread->start();
 }
 
 //-----------------------------------------------------
-//! Camera::setImageType()
+//
+//-----------------------------------------------------
+Camera::~Camera()
+{
+	DEB_DESTRUCTOR();
+
+	//delete the acquisition thread
+	delete m_acq_thread;
+
+	// releasing the detector control instance
+	DEB_TRACE() << "Camera::Camera - releasing the detector control instance";
+
+	if(m_ufxc_interface != NULL)
+	{
+		m_ufxc_interface->close_connection();
+
+		delete m_ufxc_interface;
+		m_ufxc_interface = NULL;
+	}
+
+}
+
+
+//-----------------------------------------------------
+//
+//-----------------------------------------------------
+void Camera::reset()
+{
+	DEB_MEMBER_FUNCT();
+	stopAcq();
+	//@BEGIN : other stuff on Driver/API
+	//...
+	//@END
+}
+
+//-----------------------------------------------------
+//
+//-----------------------------------------------------
+void Camera::prepareAcq()
+{
+	DEB_MEMBER_FUNCT();
+	//@BEGIN : some stuff on Driver/API before start acquisition
+	// Only snap is allowed
+	if(m_nb_frames == 0LL)
+		THROW_HW_ERROR(ErrorType::Error) << "Start mode is not allowed for this device! Please use Snap mode.";
+
+	//@END	
+}
+
+//-----------------------------------------------------
+//
+//-----------------------------------------------------
+void Camera::startAcq()
+{
+	DEB_MEMBER_FUNCT();
+	AutoMutex aLock(m_cond.mutex());
+	m_acq_frame_nb = 0;
+	StdBufferCbMgr& buffer_mgr = m_bufferCtrlObj.getBuffer();
+	buffer_mgr.setStartTimestamp(Timestamp::now());
+	DEB_TRACE() << "Ensure that Acquisition is Started  ";
+	setStatus(Camera::Busy, false);
+	//@BEGIN : Ensure that Acquisition is Started before return ...
+	m_ufxc_interface->get_config_acquisition_obj()->start_acquisition();
+	//@END
+
+	//Start acquisition thread
+	m_wait_flag = false;
+	m_quit = false;
+	m_cond.broadcast();
+}
+
+//-----------------------------------------------------
+//
+//-----------------------------------------------------
+void Camera::stopAcq()
+{
+	DEB_MEMBER_FUNCT();
+	AutoMutex aLock(m_cond.mutex());
+	// Dont do anything if acquisition is idle.
+	if(m_thread_running == true)
+	{
+		m_wait_flag = true;
+		m_cond.broadcast();
+		DEB_TRACE() << "stop requested ";
+	}
+
+	//@BEGIN : Ensure that Acquisition is Stopped before return ...	
+	//...
+	//@END
+	//now detector is ready
+	setStatus(Camera::Ready, false);
+}
+
+//-----------------------------------------------------
+//
+//-----------------------------------------------------
+void Camera::getStatus(Camera::Status& status)
+{
+	DEB_MEMBER_FUNCT();
+
+	ufxclib::T_DetectorStatus det_status;
+
+	// getting the detector status
+	det_status = m_ufxc_interface->get_daq_monitoring_obj()->get_detector_status();
+
+	switch(det_status)
+	{
+		case ufxclib::T_DetectorStatus::E_DET_READY:
+			m_status = Camera::Ready;
+			//DEB_TRACE() << "E_DET_READY";
+			break;
+		case ufxclib::T_DetectorStatus::E_DET_BUSY:
+			m_status = Camera::Busy;
+			DEB_TRACE() << "E_DET_BUSY";
+			break;
+		case ufxclib::T_DetectorStatus::E_DET_DELAY_SCANNING:
+		case ufxclib::T_DetectorStatus::E_DET_CONFIGURING:
+			m_status = Camera::Configuring;
+			DEB_TRACE() << "E_DET_CONFIGURING";
+			break;
+		case ufxclib::T_DetectorStatus::E_DET_NOT_CONFIGURED:
+		case ufxclib::T_DetectorStatus::E_DET_ERROR:
+			m_status = Camera::Fault;
+			DEB_TRACE() << "E_DET_ERROR";
+			break;
+	}
+
+	status = m_status;
+
+	DEB_RETURN() << DEB_VAR1(status);
+}
+
+//-----------------------------------------------------
+// @brief set the new camera status
+//-----------------------------------------------------
+void Camera::setStatus(Camera::Status status, bool force)
+{
+	DEB_MEMBER_FUNCT();
+	//AutoMutex aLock(m_cond.mutex());
+	if(force || m_status != Camera::Fault)
+		m_status = status;
+	//m_cond.broadcast();
+}
+
+//-----------------------------------------------------
+//
+//-----------------------------------------------------
+void Camera::readFrame(void *bptr, int& frame_nb)
+{
+	DEB_MEMBER_FUNCT();
+	DEB_TRACE() << "Camera::readFrame() ";
+	//@BEGIN : Get frame from Driver/API & copy it into bptr already allocated 
+	//			//get Acquisitions images
+	size_t IMAGE_DATA_SIZE = (m_ufxc_interface->get_data_receiver_obj()->get_frame_number_for_2_counters(ufxclib::T_Mode::software_raw) / COUNTER_NUMBER) * PACKET_DATA_LENGTH;
+	//= 112*1024+6; 112 is the frames number in each image, 1024 is the data size of each image. 
+	//header = 6 is the header size for each image and already extracted by the lib
+//	char filename[] = "/home/informatique/ica/noureddine/DeviceServers/ufxc_data.dat";
+//	std::ofstream output_file(filename, std::ios::out | std::ofstream::binary);
+	char ** imgBuffer;
+	imgBuffer = new char *[2 * m_nb_frames];
+	for(int i = 0;i < (2 * m_nb_frames);i++)
+		imgBuffer[i] = new char[IMAGE_DATA_SIZE];
+	size_t frames_number = 0;
+	m_ufxc_interface->get_data_receiver_obj()->get_all_images(imgBuffer, ufxclib::T_Mode::software_raw, m_nb_frames, frames_number);
+	//!< calculate the received images number for two counters
+	size_t received_images_number = frames_number / m_ufxc_interface->get_data_receiver_obj()->get_frame_number_for_2_counters(ufxclib::T_Mode::software_raw);
+
+	//Header only at beginning of file
+//	output_file.seekp(0, ios::end);
+//	if((long) 0 == output_file.tellp())
+//	{
+//		output_file << "IMAGE_DATA_SIZE = " << IMAGE_DATA_SIZE << " ;received_images_number = " << received_images_number << "; frames_number = " << frames_number << std::endl;
+//	}
+
+	//	for(int i = 0;i < (received_images_number * 2);i++)
+	//	{
+	//		for(int j = 0;j < IMAGE_DATA_SIZE;j++)
+	//		{
+	//			//std::cout << std::hex << int((unsigned char) (imgBuffer[i][j]));
+	//
+	//			output_file << int((unsigned char) (imgBuffer[i][j])) << " ";
+	//		}
+	//		output_file << std::endl;
+	//	}
+	//	output_file << std::endl;
+	//	output_file.flush();
+	int pixel = 0;
+	for(int i = 0;i < (received_images_number * 2);i++)
+	{
+		for(int j = 0;j < IMAGE_DATA_SIZE;j=j+7)
+		{			
+			//pixel 0
+			((unsigned short *)bptr)[pixel]= (unsigned short)((imgBuffer[i][j])<<8 | (imgBuffer[i][j+1]))>>2;//>>2
+			pixel++;
+			//pixel 1
+			((unsigned short *)bptr)[pixel]= (unsigned short)((imgBuffer[i][j+1])<<(8+6) | (imgBuffer[i][j+2])<<6 |(imgBuffer[i][j+3]))>>2;//>>2
+			pixel++;
+			//pixel 2
+			((unsigned short *)bptr)[pixel]= (unsigned short)((imgBuffer[i][j+3])<<(8+4) | (imgBuffer[i][j+4])<<4 |(imgBuffer[i][j+5]))>>2;//>>2
+			pixel++;
+			//pixel 3
+			((unsigned short *)bptr)[pixel]= (unsigned short)((imgBuffer[i][j+5])<<(8+2) | (imgBuffer[i][j+6]))>>2;//>>2
+			pixel++;			
+		}
+		std::cout<<"pixel = "<<pixel<<std::endl;		
+	}
+	frame_nb = received_images_number;
+	//@END	
+	m_status = Camera::Busy;
+}
+
+//-----------------------------------------------------
+//
+//-----------------------------------------------------
+int Camera::getNbHwAcquiredFrames()
+{
+	DEB_MEMBER_FUNCT();
+	return m_acq_frame_nb;
+}
+
+//-----------------------------------------------------
+//
+//-----------------------------------------------------
+void Camera::AcqThread::threadFunction()
+{
+	DEB_MEMBER_FUNCT();
+	//	AutoMutex aLock(m_cam.m_cond.mutex());
+	StdBufferCbMgr& buffer_mgr = m_cam.m_bufferCtrlObj.getBuffer();
+
+	while(!m_cam.m_quit)
+	{
+		while(m_cam.m_wait_flag && !m_cam.m_quit)
+		{
+			DEB_TRACE() << "Wait for start acquisition";
+			m_cam.m_thread_running = false;
+			AutoMutex lock(m_cam.m_cond.mutex());
+			m_cam.m_cond.wait();
+		}
+
+		if(m_cam.m_quit)
+			return;
+		DEB_TRACE() << "AcqThread Running";
+		m_cam.m_thread_running = true;
+
+		//auto t1 = Clock::now();
+
+		bool continueFlag = true;
+		while(continueFlag && (!m_cam.m_nb_frames || m_cam.m_acq_frame_nb < m_cam.m_nb_frames))
+		{
+			// Check first if acq. has been stopped
+			DEB_TRACE() << "AcqThread : Check first if acq. has been stopped ";
+			if(m_cam.m_wait_flag)
+			{
+				DEB_TRACE() << "AcqThread: has been stopped from user ";
+				continueFlag = false;
+				continue;
+			}
+
+			Camera::Status status;
+			m_cam.getStatus(status);
+			while(status == Camera::Busy)
+			{
+				//refresh status
+				m_cam.getStatus(status);
+				usleep(1000);//wait 1ms
+			}
+			//Prepare Lima Frame Ptr 
+			DEB_TRACE() << "Prepare  Lima Frame Ptr";
+			void* bptr = buffer_mgr.getFrameBufferPtr(m_cam.m_acq_frame_nb);
+
+			//Read Frame From API/Driver/Etc ... & Copy it into Lima Frame Ptr
+			DEB_TRACE() << "Read Frame From API/Driver/Etc ... & Copy it into Lima Frame Ptr";
+			int frame_nb=0;
+			m_cam.readFrame(bptr, frame_nb/*m_cam.m_acq_frame_nb*/);
+
+			//Push the image buffer through Lima 
+			DEB_TRACE() << "Declare a Lima new Frame Ready (" << m_cam.m_acq_frame_nb << ")";
+			HwFrameInfoType frame_info;
+			frame_info.acq_frame_nb = m_cam.m_acq_frame_nb;
+			buffer_mgr.newFrameReady(frame_info);
+			m_cam.m_acq_frame_nb++;
+			DEB_TRACE()<<"m_cam.m_acq_frame_nb = "<<m_cam.m_acq_frame_nb;
+		}
+		//auto t2 = Clock::now();
+		//DEB_TRACE() << "Delta t2-t1: " << std::chrono::duration_cast < std::chrono::nanoseconds > (t2 - t1).count() << " nanoseconds";
+		
+		//stopAcq only if this is not already done		
+		DEB_TRACE() << "AcqThread : stopAcq only if this is not already done ";
+		if(!m_cam.m_wait_flag)
+		{
+			DEB_TRACE() << " AcqThread: StopAcq";
+			m_cam.stopAcq();
+		}
+		
+		DEB_TRACE() << " AcqThread::threadfunction() Setting thread running flag to false";
+		AutoMutex lock(m_cam.m_cond.mutex());
+		//		aLock.lock();
+		m_cam.m_thread_running = false;
+		m_cam.m_wait_flag = true;
+	}
+}
+
+//-----------------------------------------------------
+//
+//-----------------------------------------------------
+Camera::AcqThread::AcqThread(Camera& cam):
+m_cam(cam)
+{
+	AutoMutex aLock(m_cam.m_cond.mutex());
+	m_cam.m_wait_flag = true;
+	m_cam.m_quit = false;
+	aLock.unlock();
+	pthread_attr_setscope(&m_thread_attr, PTHREAD_SCOPE_PROCESS);
+}
+
+//-----------------------------------------------------
+//
+//-----------------------------------------------------
+Camera::AcqThread::~AcqThread()
+{
+	AutoMutex aLock(m_cam.m_cond.mutex());
+	m_cam.m_quit = true;
+	m_cam.m_cond.broadcast();
+	aLock.unlock();
+}
+
+//-----------------------------------------------------
+//
+//-----------------------------------------------------
+void Camera::getImageType(ImageType& type)
+{
+	DEB_MEMBER_FUNCT();
+	switch(m_depth)
+	{
+		case 16: type = Bpp16;
+			break;
+		default:
+			THROW_HW_ERROR(Error) << "This pixel format of the camera is not managed, only 16 bits cameras are already managed!";
+			break;
+	}
+	return;
+}
+
+//-----------------------------------------------------
+//
 //-----------------------------------------------------
 void Camera::setImageType(ImageType type)
 {
-    DEB_MEMBER_FUNCT();
-    DEB_TRACE() << "Camera::setImageType - " << DEB_VAR1(type);
-    switch(type)
-    {
-        case Bpp16:
-            m_depth = 16;
-            break;
-        default:
-            THROW_HW_ERROR(Error) << "This pixel format of the camera is not managed, only 16 bits cameras are already managed!";
-            break;
-    }
-}
-
-//---------------------------------------------------------------------------------------
-//! Camera::getImageType()
-//---------------------------------------------------------------------------------------
-void Camera::getImageType(ImageType& type)
-{
-    DEB_MEMBER_FUNCT();
-    switch(m_depth)
-    {
-        case 16: type = Bpp16;
-            break;
-        default:
-            THROW_HW_ERROR(Error) << "This pixel format of the camera is not managed, only 16 bits cameras are already managed!";
-            break;
-    }
-    return;
-}
-
-//---------------------------------------------------------------------------------------
-//! Camera::setBin()
-//---------------------------------------------------------------------------------------
-void Camera::setBin(const Bin& bin)
-{
-    DEB_MEMBER_FUNCT();
-    DEB_TRACE() << "Camera::setBin";
-    DEB_PARAM() << DEB_VAR1(bin);
-    if(m_name == "NONE") return; //simu mode : used to start LimaDetector even when detector is not available
-
-    m_binning_x = bin.getX();
-    m_binning_y = bin.getY();
-
-    // Define the binning.
-    CHECK_MX_RECORD(m_mx_record, "Camera::setBin()");
-    mx_status_type mx_status;
-    mx_status = mx_area_detector_set_binsize(m_mx_record, m_binning_x, m_binning_y);
-    CHECK_MX_STATUS(mx_status, "Camera::setBin()")
-
-}
-
-//---------------------------------------------------------------------------------------
-//! Camera::getBin()
-//---------------------------------------------------------------------------------------
-void Camera::getBin(Bin& bin)
-{
-    DEB_MEMBER_FUNCT();
-    //DEB_TRACE() << "Camera::getBin";
-
-    // Get the current Bin 
-    mx_status_type mx_status;
-    mx_status = mx_area_detector_get_binsize(m_mx_record, &m_binning_x, &m_binning_y);
-    CHECK_MX_STATUS(mx_status, "Camera::getBin()")
-    bin = Bin(m_binning_x, m_binning_y);
-    DEB_RETURN() << DEB_VAR1(bin);
-}
-
-//---------------------------------------------------------------------------------------
-//! Camera::checkBin()
-//---------------------------------------------------------------------------------------
-void Camera::checkBin(Bin& bin)
-{
-    DEB_MEMBER_FUNCT();
-    DEB_TRACE() << "Camera::checkBin";
-    DEB_PARAM() << DEB_VAR1(bin);
-
-    //All standards Binning are supported !! @TODO TO CONFIRM 
-    if(bin.getX() <= 0 || bin.getY() <= 0)
-    {
-        THROW_HW_ERROR(Error) << "checkBin : Invalid Bin = " << DEB_VAR1(bin);
-    }
+	DEB_MEMBER_FUNCT();
+	DEB_TRACE() << "Camera::setImageType - " << DEB_VAR1(type);
+	switch(type)
+	{
+		case Bpp16:
+		{
+			m_depth = 16;
+		}
+			break;
+		default:
+			THROW_HW_ERROR(Error) << "This pixel format of the camera is not managed, only 16 bits cameras are already managed!";
+			break;
+	}
 }
 
 //-----------------------------------------------------
-//! Camera::checkRoi()
+//
 //-----------------------------------------------------
-void Camera::checkRoi(const Roi& set_roi, Roi& hw_roi)
+void Camera::getDetectorType(std::string& type)
 {
-    DEB_MEMBER_FUNCT();
-    DEB_TRACE() << "Camera::checkRoi";
-    DEB_PARAM() << DEB_VAR1(set_roi);
-    //@@ #TODO implement this    
-    hw_roi = set_roi;
-
-    DEB_RETURN() << DEB_VAR1(hw_roi);
+	DEB_MEMBER_FUNCT();
+	//@BEGIN : Get Detector type from Driver/API
+	type = m_detector_type;
+	//@END	
 }
 
-//---------------------------------------------------------------------------------------
-//! Camera::getRoi()
-//---------------------------------------------------------------------------------------
-void Camera::getRoi(Roi& hw_roi)
+//-----------------------------------------------------
+//
+//-----------------------------------------------------
+void Camera::getDetectorModel(std::string& model)
 {
-    DEB_MEMBER_FUNCT();
-    DEB_TRACE() << "Camera::getRoi";
-    //@@ #TODO implement this
-    hw_roi = Roi(0, 0, m_max_width, m_max_height);
-
-    DEB_RETURN() << DEB_VAR1(hw_roi);
+	DEB_MEMBER_FUNCT();
+	//@BEGIN : Get Detector model from Driver/API
+	model = m_detector_model;
+	//@END		
 }
 
-//---------------------------------------------------------------------------------------
-//! Camera::setRoi()
-//---------------------------------------------------------------------------------------
-void Camera::setRoi(const Roi& set_roi)
+//-----------------------------------------------------
+//
+//-----------------------------------------------------
+void Camera::getDetectorImageSize(Size& size)
 {
-    DEB_MEMBER_FUNCT();
-    DEB_TRACE() << "Camera::setRoi";
-    DEB_PARAM() << DEB_VAR1(set_roi);
-    //@@@@ #TODO implement this
-    if(!set_roi.isActive())
-    {
-        DEB_TRACE() << "Roi is not Enabled";
-    }
-    else
-    {
-        DEB_TRACE() << "Roi is Enabled";
-    }
+	DEB_MEMBER_FUNCT();
+	//@BEGIN : Get Detector type from Driver/API	
+	unsigned width = m_ufxc_interface->get_config_acquisition_obj()->get_current_width();
+	unsigned height = m_ufxc_interface->get_config_acquisition_obj()->get_current_height();
+	size = Size(width * 2, 256);
+	//@END
 }
 
-//---------------------------------------------------------------------------------------
-//! Camera::setExtraParam()
-//---------------------------------------------------------------------------------------
-void Camera::setExtraParam(const std::string& name, const std::string& val)
+//-----------------------------------------------------
+//
+//-----------------------------------------------------
+void Camera::getPixelSize(double& sizex, double& sizey)
 {
-    DEB_MEMBER_FUNCT();
-    DEB_TRACE() << "Camera::setExtraParam";
-
-    if(name == "dh_offset_correction")
-    {
-        if(val == "0" || val == "1")
-        {
-            if(val == "0")
-                mx_area_detector_set_register(m_mx_record, "dh_offset_correction", (long) 0);
-            else if(val == "1")
-                mx_area_detector_set_register(m_mx_record, "dh_offset_correction", (long) 0x1);
-        }
-        else
-        {
-            THROW_HW_ERROR(Error) << "setExtraParam() : Invalid value of " << name << " , should be  0 (off) or 1 (on) instead of " << val;
-        }
-    }
-    else if(name == "dh_linearization")
-    {
-        if(val == "0" || val == "1")
-        {
-            if(val == "0")
-                mx_area_detector_set_register(m_mx_record, "dh_linearization", (long) 0);
-            else if(val == "1")
-                mx_area_detector_set_register(m_mx_record, "dh_linearization", (long) 0x1);
-        }
-        else
-        {
-            THROW_HW_ERROR(Error) << "setExtraParam() : Invalid value of " << name << " , should be  0 (off) or 1 (on) instead of " << val;
-        }
-    }
-    else
-    {
-        THROW_HW_ERROR(Error) << "setExtraParam() : Invalid Parameter " << name << " !\n" << "It should be dh_offset_correction, dh_linearization !";
-    }
+	DEB_MEMBER_FUNCT();
+	//@BEGIN : Get Detector type from Driver/API			
+	sizex = xPixelSize;
+	sizey = yPixelSize;
+	//@END
 }
 
-//---------------------------------------------------------------------------------------
-//! Camera::getExtraParam()
-//---------------------------------------------------------------------------------------
-std::string Camera::getExtraParam(const std::string& name)
+//-----------------------------------------------------
+//
+//-----------------------------------------------------
+HwBufferCtrlObj* Camera::getBufferCtrlObj()
 {
-    DEB_MEMBER_FUNCT();
-    DEB_TRACE() << "Camera::getExtraParam";
-    if(name == "dh_offset_correction")
-    {
-        long speed_val = 0;
-        mx_area_detector_get_register(m_mx_record, "dh_offset_correction", &speed_val);
-        if(speed_val == 0)
-            return std::string("0 (off)");
-        else if(speed_val == 0x1)
-            return std::string("1 (on)");
-    }
-    else if(name == "dh_linearization")
-    {
-        long speed_val = 0;
-        mx_area_detector_get_register(m_mx_record, "dh_linearization", &speed_val);
-        if(speed_val == 0)
-            return std::string("0 (off)");
-        else if(speed_val == 0x1)
-            return std::string("1 (on)");
-    }
-    else
-    {
-        THROW_HW_ERROR(Error) << "getExtraParam() : Invalid Parameter " << name << " !\n" << "It should be dh_offset_correction, dh_linearization !";
-    }
+	return &m_bufferCtrlObj;
 }
 
-//---------------------------------------------------------------------------------------
-//! Camera::computeTimestamp()
-//---------------------------------------------------------------------------------------
-double Camera::computeTimestamp(MX_IMAGE_FRAME* image_frame, long num_exp)
+//-----------------------------------------------------
+//
+//-----------------------------------------------------
+bool Camera::checkTrigMode(TrigMode mode)
 {
-    DEB_MEMBER_FUNCT();
-    //    DEB_TRACE() << "Camera::computeTimestamp";
-    CHECK_MX_RECORD(m_mx_record, "Camera::computeTimestamp()");
-    mx_status_type mx_status;
-    if(num_exp == 0)
-    {
-        // Keep the three first digits as we want to have the
-        // milliseconds from a number expressed in nanoseconds.
-        int ms = (MXIF_TIMESTAMP_NSEC(image_frame) / 1000000.);
-        m_time_stamp_0 = MXIF_TIMESTAMP_SEC(image_frame) + ms / 1000.;
-    }
+	DEB_MEMBER_FUNCT();
+	bool valid_mode;
 
-    double time_stamp = 0.;
+	switch(mode)
+	{
+		case IntTrig:
+		case IntTrigMult:
+		case ExtTrigSingle:
+		case ExtTrigMult:
+		case ExtGate:
+			valid_mode = true;
+			break;
+		case ExtTrigReadout:
+		default:
+			valid_mode = false;
+			break;
+	}
+	return valid_mode;
+}
 
-    double mTiming = m_exposure_time + m_latency_time - m_readout_delay_time; //frame_time
-    if(m_acq_mode_name == "MULTIFRAME")
-    {
-        m_time_stamp = m_time_stamp_0 + num_exp * (mTiming + m_readout_delay_time);
-    }
+//-----------------------------------------------------
+//
+//-----------------------------------------------------
+void Camera::setTrigMode(TrigMode mode)
+{
+	DEB_MEMBER_FUNCT();
+	DEB_TRACE() << "Camera::setTrigMode() " << DEB_VAR1(mode);
+	DEB_PARAM() << DEB_VAR1(mode);
+	switch(mode)
+	{
+		case IntTrig:
+		case IntTrigMult:
+			break;
+		case ExtTrigSingle:
+			break;
+		case ExtTrigMult:
+			break;
+		case ExtGate:
+			break;
+		default:
+			THROW_HW_ERROR(NotSupported) << DEB_VAR1(mode);
+	}
+	m_trigger_mode = mode;
+}
 
-    if(m_acq_mode_name == "GEOMETRICAL")
-    {
-        int stored_gap_multiplier = (m_gap_multiplier - 1.0) * 256;
-        double effective_gap_multiplier = (stored_gap_multiplier / 256.0) + 1.0;
+//-----------------------------------------------------
+//
+//-----------------------------------------------------
+void Camera::getTrigMode(TrigMode& mode)
+{
+	DEB_MEMBER_FUNCT();
+	mode = m_trigger_mode;
+	DEB_RETURN() << DEB_VAR1(mode);
+}
 
-        double A = m_exposure_time + m_readout_delay_time + m_ccd_readout_time;
-        double B = mTiming - m_exposure_time - m_ccd_readout_time;
-        double G = effective_gap_multiplier;
-        double n = double(num_exp);
+//-----------------------------------------------------
+//
+//-----------------------------------------------------
+void Camera::getExpTime(double& exp_time)
+{
+	DEB_MEMBER_FUNCT();
+	//UFXCLib use (ms), but lima use (second) as unit
+	exp_time = m_ufxc_interface->get_config_acquisition_obj()->get_counting_time_ms();
+	exp_time = exp_time / 1000;
+	m_exp_time = exp_time;
+	DEB_RETURN() << DEB_VAR1(exp_time);
+}
 
-        m_time_stamp = m_time_stamp_0;
-        if(num_exp > 0)
-        {
-            if(G != 1)
-                m_time_stamp = m_time_stamp_0 + (A * n + (((std::pow(G, n) - 1) / (G - 1)) * B));
-            else
-                m_time_stamp = m_time_stamp_0 + num_exp * (mTiming + m_readout_delay_time);
-
-        }
-    }
-
-    return m_time_stamp;
+//-----------------------------------------------------
+//
+//-----------------------------------------------------
+void Camera::setExpTime(double exp_time)
+{
+	DEB_MEMBER_FUNCT();
+	DEB_TRACE() << "Camera::setExpTime() " << DEB_VAR1(exp_time);
+	//UFXCLib use (ms), but lima use (second) as unit
+	m_ufxc_interface->get_config_acquisition_obj()->set_counting_time_ms(exp_time * 1000);
+	m_exp_time = exp_time;
 }
 
 
-//---------------------------------------------------------------------------------------
-//! Camera::_open()
-//---------------------------------------------------------------------------------------
-void Camera::_open()
+//-----------------------------------------------------
+//
+//-----------------------------------------------------
+void Camera::setLatTime(double lat_time)
 {
-    DEB_MEMBER_FUNCT();
-    DEB_TRACE() << "Camera::_open";
-    if(m_name == "NONE") return; //simu mode : used to start LimaDetector even when aviex detector is not available
-
-    //@@@@ #TODO close if previously open
-    //    close();
-
-    // open mx database  
-    mx_status_type mx_status;
-    AutoMutex mx_lock(m_cond.mutex());
-    DEB_TRACE() << "Open Mx DataBase";
-    MX_RECORD* database;
-    mx_status = mx_setup_database(&database, (char*) m_database_file_name.c_str());
-    CHECK_MX_STATUS(mx_status, "Camera::_open()")
-
-    // open mx record
-    DEB_TRACE() << "Open Mx Record";
-    m_mx_record = mx_get_record(database, (char*) m_name.c_str());
-    CHECK_MX_RECORD(m_mx_record, "Camera::_open() - The MX server is either not running or is not working correctly. ")
-
-    if(m_mx_record->mx_type != MXT_AD_NETWORK)
-    {
-        std::ostringstream err;
-        err << "Mx Record '" << m_name << "' is not a network area detector record." << std::endl;
-        throw LIMA_HW_EXC(Error, "Camera::_open()") << " - " << err.str().c_str();
-    }
-
-    // get ccd size
-    DEB_TRACE() << "Get CCD Size";
-    long width = 0;
-    long height = 0;
-    mx_status = mx_area_detector_get_maximum_framesize(m_mx_record, &width, &height);
-    CHECK_MX_STATUS(mx_status, "Camera::_open()")
-    m_max_width = width;
-    m_max_height = height;
-    DEB_TRACE() << "m_max_width = " << m_max_width;
-    DEB_TRACE() << "m_max_height = " << m_max_height;
-
-    // get ccd depth
-    DEB_TRACE() << "Get CCD Depth";
-    m_depth = 0;
-    long bits_per_pixel = 16;
-    mx_status = mx_area_detector_get_bits_per_pixel(m_mx_record, &bits_per_pixel);
-    CHECK_MX_STATUS(mx_status, "Camera::_open()")
-    m_depth = bits_per_pixel;
-    DEB_TRACE() << "m_depth = " << m_depth;
-
-    // update device state
-    ////mState = Tango::OPEN;
-    m_status = "The camera is Open and Ready.";
+	DEB_MEMBER_FUNCT();
+	DEB_TRACE() << "Camera::setLatTime() " << DEB_VAR1(lat_time);
+	//UFXCLib use (ms), but lima use (second) as unit
+	m_ufxc_interface->get_config_acquisition_obj()->set_waiting_time_ms(lat_time * 1000);
+	m_lat_time = lat_time;
 }
 
-//---------------------------------------------------------------------------------------
-//! Camera::_close()
-//---------------------------------------------------------------------------------------
-void Camera::_close()
+//-----------------------------------------------------
+//
+//-----------------------------------------------------
+void Camera::getLatTime(double& lat_time)
 {
-    DEB_MEMBER_FUNCT();
-    DEB_TRACE() << "Camera::_close";
-    if(m_name == "NONE") return; //simu mode : used to start LimaDetector even when detector is not available
-
-    //@@@@ #TODO stop possibly running acquisition
-    // stop();
-
-    AutoMutex mx_lock(m_cond.mutex());
-    if(m_mx_record)
-    {
-        // #TODO : find a way to close the connection with mx server
-        mx_close_hardware(m_mx_record);
-        mx_delete_record(m_mx_record);
-    }
-    m_mx_record = 0;
-
-    ////mState = Tango::CLOSE;
-    m_status = "The camera was Closed.";
+	DEB_MEMBER_FUNCT();
+	//UFXCLib use (ms), but lima use (second) as unit 
+	lat_time = m_ufxc_interface->get_config_acquisition_obj()->get_waiting_time_ms();
+	lat_time = lat_time / 1000;
+	m_lat_time = lat_time;
+	DEB_RETURN() << DEB_VAR1(lat_time);
 }
 
-//---------------------------------------------------------------------------------------
-//! Camera::_armDetector()
-//---------------------------------------------------------------------------------------
-void Camera::_armDetector()
+//-----------------------------------------------------
+//
+//-----------------------------------------------------
+void Camera::getExposureTimeRange(double& min_expo, double& max_expo) const
 {
-    DEB_MEMBER_FUNCT();
-    DEB_TRACE() << "Camera::_armDetector";
-    // Prepare the detector aviex in order to make an acquisition : arm/trigger
-    CHECK_MX_RECORD(m_mx_record, "CameraThread::_armDetector()");
-
-    mx_status_type mx_status;
-    DEB_TRACE() << "\t- arm Detector.";
-    mx_status = mx_area_detector_arm(m_mx_record);
-    CHECK_MX_STATUS(mx_status, "Camera::_armDetector()");
-
-    //in internal trigger, we need to call this function to really start the acquisition!!
-    DEB_TRACE() << "\t- is internal trigger ?";
-    if(m_trigger_mode == 1)
-    {
-        DEB_TRACE() << "\t- internal detector trigger.";
-        mx_status = mx_area_detector_trigger(m_mx_record);
-        CHECK_MX_STATUS(mx_status, "Camera::_armDetector()");
-    }
+	DEB_MEMBER_FUNCT();
+	min_expo = 0.;
+	max_expo = 10;//10s
+	DEB_RETURN() << DEB_VAR2(min_expo, max_expo);
 }
 
-//========================================================================================
+//-----------------------------------------------------
+//
+//-----------------------------------------------------
+void Camera::getLatTimeRange(double& min_lat, double& max_lat) const
+{
+	DEB_MEMBER_FUNCT();
+	// --- no info on min latency
+	min_lat = 0.;
+	// --- do not know how to get the max_lat, fix it as the max exposure time
+	max_lat = 10;//10s
+	DEB_RETURN() << DEB_VAR2(min_lat, max_lat);
+}
+
+//-----------------------------------------------------
+//
+//-----------------------------------------------------
+void Camera::setNbFrames(int nb_frames)
+{
+	DEB_MEMBER_FUNCT();
+	DEB_TRACE() << "Camera::setNbFrames() " << DEB_VAR1(nb_frames);
+	if(m_nb_frames < 0)
+	{
+		THROW_HW_ERROR(Error) << "Number of frames to acquire has not been set";
+	}
+	m_ufxc_interface->get_config_acquisition_obj()->set_images_number(nb_frames);
+	m_nb_frames = nb_frames;
+}
+
+//-----------------------------------------------------
+//
+//-----------------------------------------------------
+void Camera::getNbFrames(int& nb_frames)
+{
+	DEB_MEMBER_FUNCT();
+	DEB_TRACE() << "Camera::getNbFrames";
+	DEB_RETURN() << DEB_VAR1(m_nb_frames);
+	nb_frames = m_ufxc_interface->get_config_acquisition_obj()->get_images_number();
+	m_nb_frames = nb_frames;
+}
+
+
+///////////////////////////////////////////////////
+// Ufxc specific stuff now
+///////////////////////////////////////////////////////
+void Camera::get_lib_version(std::string & version)
+{
+	version = m_ufxc_interface->get_UFXC_lib_version();
+}
+
+//-----------------------------------------------------
+//
+//-----------------------------------------------------
+void Camera::get_firmware_version(std::string & version)
+{
+	version = m_ufxc_interface->get_daq_monitoring_obj()->get_firmware_version();
+}
+
+//-----------------------------------------------------
+//
+//-----------------------------------------------------
+void Camera::get_detector_temperature(unsigned long temp)
+{
+	temp = m_ufxc_interface->get_daq_monitoring_obj()->get_detector_temp();
+}
+/*******************************************************
+ * \brief Set the Hardware registers in the DAQ system
+ *******************************************************/
+void Camera::SetHardwareRegisters()
+{
+	m_acquisition_registers[ufxclib::T_AcquisitionConfigKey::DET_THRESHOLD_LOW_1] = "FMC.DET_THRESHOLD_LOW_1";
+	m_acquisition_registers[ufxclib::T_AcquisitionConfigKey::DET_THRESHOLD_LOW_2] = "FMC.DET_THRESHOLD_LOW_2";
+	m_acquisition_registers[ufxclib::T_AcquisitionConfigKey::DET_THRESHOLD_HIGH_1] = "FMC.DET_THRESHOLD_HIGH_1";
+	m_acquisition_registers[ufxclib::T_AcquisitionConfigKey::DET_THRESHOLD_HIGH_2] = "FMC.DET_THRESHOLD_HIGH_2";
+	m_acquisition_registers[ufxclib::T_AcquisitionConfigKey::ACQ_MODE] = "FMC.ACQ_MODE";
+	m_acquisition_registers[ufxclib::T_AcquisitionConfigKey::ACQ_COUNT_TIME] = "FMC.ACQ_COUNT_TIME";
+	m_acquisition_registers[ufxclib::T_AcquisitionConfigKey::ACQ_WAIT_TIME] = "FMC.ACQ_WAIT_TIME";
+	m_acquisition_registers[ufxclib::T_AcquisitionConfigKey::ACQ_NIMG] = "FMC.ACQ_NIMG";
+	m_acquisition_registers[ufxclib::T_AcquisitionConfigKey::ACQ_NTRIG] = "FMC.ACQ_NTRIG";
+	m_acquisition_registers[ufxclib::T_AcquisitionConfigKey::StartAcq] = "FMC.StartAcq";
+	m_acquisition_registers[ufxclib::T_AcquisitionConfigKey::AbortAcq] = "FMC.AbortAcq";
+	m_acquisition_registers[ufxclib::T_AcquisitionConfigKey::SFP_SOFT_RESET] = "SFP.SOFT_RESET";
+	m_acquisition_registers[ufxclib::T_AcquisitionConfigKey::FMC_SOFT_RESET] = "FMC.SOFT_RESET";
+
+	m_detector_registers[ufxclib::T_DetectorConfigKey::GLB_POL] = "FMC.GLB_POL";
+	m_detector_registers[ufxclib::T_DetectorConfigKey::GLB_FS] = "FMC.GLB_FS";
+	m_detector_registers[ufxclib::T_DetectorConfigKey::GLB_BCAS] = "FMC.GLB_BCAS";
+	m_detector_registers[ufxclib::T_DetectorConfigKey::GLB_BKRUM] = "FMC.GLB_BKRUM";
+	m_detector_registers[ufxclib::T_DetectorConfigKey::GLB_BTRIM] = "FMC.GLB_BTRIM";
+	m_detector_registers[ufxclib::T_DetectorConfigKey::GLB_BREF] = "FMC.GLB_BREF";
+	m_detector_registers[ufxclib::T_DetectorConfigKey::GLB_BSH] = "FMC.GLB_BSH";
+	m_detector_registers[ufxclib::T_DetectorConfigKey::GLB_BDIS] = "FMC.GLB_BDIS";
+	m_detector_registers[ufxclib::T_DetectorConfigKey::GLB_BGSH] = "FMC.GLB_BGSH";
+	m_detector_registers[ufxclib::T_DetectorConfigKey::GLB_BR] = "FMC.GLB_BR";
+	m_detector_registers[ufxclib::T_DetectorConfigKey::DetectorConfig] = "FMC.DetectorConfig";
+	m_detector_registers[ufxclib::T_DetectorConfigKey::PIXCONF_BITLINE_NBR] = "FMC.PIXCONF_BITLINE_NBR";
+	m_detector_registers[ufxclib::T_DetectorConfigKey::PIXCONF_COL_31_0_A] = "FMC.PIXCONF_COL_31_0_A";
+	m_detector_registers[ufxclib::T_DetectorConfigKey::PIXCONF_COL_63_32_A] = "FMC.PIXCONF_COL_63_32_A";
+	m_detector_registers[ufxclib::T_DetectorConfigKey::PIXCONF_COL_95_64_A] = "FMC.PIXCONF_COL_95_64_A";
+	m_detector_registers[ufxclib::T_DetectorConfigKey::PIXCONF_COL_127_96_A] = "FMC.PIXCONF_COL_127_96_A";
+	m_detector_registers[ufxclib::T_DetectorConfigKey::PIXCONF_COL_31_0_B] = "FMC.PIXCONF_COL_31_0_B";
+	m_detector_registers[ufxclib::T_DetectorConfigKey::PIXCONF_COL_63_32_B] = "FMC.PIXCONF_COL_63_32_B";
+	m_detector_registers[ufxclib::T_DetectorConfigKey::PIXCONF_COL_95_64_B] = "FMC.PIXCONF_COL_95_64_B";
+	m_detector_registers[ufxclib::T_DetectorConfigKey::PIXCONF_COL_127_96_B] = "FMC.PIXCONF_COL_127_96_B";
+	m_detector_registers[ufxclib::T_DetectorConfigKey::PixLineConfig] = "FMC.PixLineConfig";
+
+
+	m_monitor_registers[ufxclib::T_MonitoringKey::TEMP_DAQ_PICO] = "SLOW.TEMP_DAQ_PICO";
+	m_monitor_registers[ufxclib::T_MonitoringKey::TEMP_DAQ_SFP] = "SLOW.TEMP_DAQ_SFP";
+	m_monitor_registers[ufxclib::T_MonitoringKey::FW_DELAY] = "FMC.FW_DELAY";
+	m_monitor_registers[ufxclib::T_MonitoringKey::TEMP_DAQ_PSU] = "SLOW.TEMP_DAQ_PSU";
+	m_monitor_registers[ufxclib::T_MonitoringKey::TEMP_DET] = "SLOW.TEMP_DET";
+	m_monitor_registers[ufxclib::T_MonitoringKey::ALIM_DET_P_HV_CURRENT] = "SLOW.ALIM_DET_P_HV_CURRENT";
+	m_monitor_registers[ufxclib::T_MonitoringKey::ALIM_DET_P_HV_CHIP] = "SLOW.ALIM_DET_P_HV_CHIP";
+	m_monitor_registers[ufxclib::T_MonitoringKey::ALIM_DET_1V2_CORE] = "SLOW.ALIM_DET_1V2_CORE";
+	m_monitor_registers[ufxclib::T_MonitoringKey::ALIM_DET_0V8_VDDM] = "SLOW.ALIM_DET_0V8_VDDM";
+	m_monitor_registers[ufxclib::T_MonitoringKey::ALIM_DET_1V2_DISC_A] = "SLOW.ALIM_DET_1V2_DISC_A";
+	m_monitor_registers[ufxclib::T_MonitoringKey::ALIM_DET_1V2_DISC_B] = "SLOW.ALIM_DET_1V2_DISC_B";
+	m_monitor_registers[ufxclib::T_MonitoringKey::ALIM_DET_1V2_VDDA_A] = "SLOW.ALIM_DET_1V2_VDDA_A";
+	m_monitor_registers[ufxclib::T_MonitoringKey::ALIM_DET_1V2_VDDA_B] = "SLOW.ALIM_DET_1V2_VDDA_B";
+	m_monitor_registers[ufxclib::T_MonitoringKey::DETECTOR_STATUS] = "FMC.DETECTOR_STATUS";
+	m_monitor_registers[ufxclib::T_MonitoringKey::DELAY_SCAN] = "FMC.Delay_scan";
+	m_monitor_registers[ufxclib::T_MonitoringKey::Abortdelay] = "FMC.AbortAcq";
+	m_monitor_registers[ufxclib::T_MonitoringKey::FIRMWARE_VERSION] = "*IDN";
+	m_monitor_registers[ufxclib::T_MonitoringKey::EN_PIXCONF_SCANDELAY_SFP] = "FMC.EN_PIXCONF_SCANDELAY_SFP";
+}

@@ -1,7 +1,7 @@
 //###########################################################################
 // This file is part of LImA, a Library for Image Acquisition
 //
-// Copyright (C) : 2009-2018
+// Copyright (C) : 2009-2014
 // European Synchrotron Radiation Facility
 // BP 220, Grenoble 38043
 // FRANCE
@@ -20,18 +20,17 @@
 // along with this program; if not, see <http://www.gnu.org/licenses/>.
 //###########################################################################
 
+#include <sstream>
+#include "UfxcInterface.h"
 #include "UfxcCamera.h"
-#include "UfxcSyncCtrlObj.h"
 
 using namespace lima;
 using namespace lima::Ufxc;
 
-/*******************************************************************
- * \brief SyncCtrlObj constructor
- *******************************************************************/
-SyncCtrlObj::SyncCtrlObj(Camera& cam) : 
-		HwSyncCtrlObj(), 
-		m_cam(cam)
+//-----------------------------------------------------
+//
+//-----------------------------------------------------
+SyncCtrlObj::SyncCtrlObj(Camera& cam):m_cam(cam)
 {
 	DEB_CONSTRUCTOR();
 }
@@ -41,6 +40,7 @@ SyncCtrlObj::SyncCtrlObj(Camera& cam) :
 //-----------------------------------------------------
 SyncCtrlObj::~SyncCtrlObj()
 {
+	DEB_DESTRUCTOR();
 }
 
 //-----------------------------------------------------
@@ -48,18 +48,10 @@ SyncCtrlObj::~SyncCtrlObj()
 //-----------------------------------------------------
 bool SyncCtrlObj::checkTrigMode(TrigMode trig_mode)
 {
-	bool valid_mode = false;
-	switch (trig_mode)
-	{
-		case IntTrig:
-		case ExtTrigSingle:
-			valid_mode = true;
-		break;
+	DEB_MEMBER_FUNCT();
+	DEB_PARAM() << DEB_VAR1(trig_mode);
 
-		default:
-			valid_mode = false;
-	}
-	return valid_mode;
+	return m_cam.checkTrigMode(trig_mode);
 }
 
 //-----------------------------------------------------
@@ -68,11 +60,14 @@ bool SyncCtrlObj::checkTrigMode(TrigMode trig_mode)
 void SyncCtrlObj::setTrigMode(TrigMode trig_mode)
 {
 	DEB_MEMBER_FUNCT();
-    if (!checkTrigMode(trig_mode))
-        THROW_HW_ERROR(InvalidValue) << "Invalid " << DEB_VAR1(trig_mode);
+	DEB_PARAM() << DEB_VAR1(trig_mode);
 
+	if(!checkTrigMode(trig_mode))
+	{
+		THROW_HW_ERROR(InvalidValue) << "Invalid "
+		 << DEB_VAR1(trig_mode);
+	}
 	m_cam.setTrigMode(trig_mode);
-
 }
 
 //-----------------------------------------------------
@@ -80,6 +75,7 @@ void SyncCtrlObj::setTrigMode(TrigMode trig_mode)
 //-----------------------------------------------------
 void SyncCtrlObj::getTrigMode(TrigMode& trig_mode)
 {
+	DEB_MEMBER_FUNCT();
 	m_cam.getTrigMode(trig_mode);
 }
 
@@ -88,6 +84,8 @@ void SyncCtrlObj::getTrigMode(TrigMode& trig_mode)
 //-----------------------------------------------------
 void SyncCtrlObj::setExpTime(double exp_time)
 {
+	DEB_MEMBER_FUNCT();
+	DEB_PARAM() << DEB_VAR1(exp_time);
 	m_cam.setExpTime(exp_time);
 }
 
@@ -96,6 +94,7 @@ void SyncCtrlObj::setExpTime(double exp_time)
 //-----------------------------------------------------
 void SyncCtrlObj::getExpTime(double& exp_time)
 {
+	DEB_MEMBER_FUNCT();
 	m_cam.getExpTime(exp_time);
 }
 
@@ -104,7 +103,8 @@ void SyncCtrlObj::getExpTime(double& exp_time)
 //-----------------------------------------------------
 void SyncCtrlObj::setLatTime(double lat_time)
 {
-	m_cam.setLatencyTime(lat_time);
+	DEB_MEMBER_FUNCT();
+	m_cam.setLatTime(lat_time);
 }
 
 //-----------------------------------------------------
@@ -112,7 +112,8 @@ void SyncCtrlObj::setLatTime(double lat_time)
 //-----------------------------------------------------
 void SyncCtrlObj::getLatTime(double& lat_time)
 {
-	m_cam.getLatencyTime(lat_time);
+	DEB_MEMBER_FUNCT();
+	m_cam.getLatTime(lat_time);
 }
 
 //-----------------------------------------------------
@@ -120,6 +121,7 @@ void SyncCtrlObj::getLatTime(double& lat_time)
 //-----------------------------------------------------
 void SyncCtrlObj::setNbHwFrames(int nb_frames)
 {
+	DEB_MEMBER_FUNCT();
 	m_cam.setNbFrames(nb_frames);
 }
 
@@ -128,6 +130,7 @@ void SyncCtrlObj::setNbHwFrames(int nb_frames)
 //-----------------------------------------------------
 void SyncCtrlObj::getNbHwFrames(int& nb_frames)
 {
+	DEB_MEMBER_FUNCT();
 	m_cam.getNbFrames(nb_frames);
 }
 
@@ -136,10 +139,16 @@ void SyncCtrlObj::getNbHwFrames(int& nb_frames)
 //-----------------------------------------------------
 void SyncCtrlObj::getValidRanges(ValidRangesType& valid_ranges)
 {
-	double min_time = 10e-9;
-	double max_time = 10e+9;
+	DEB_MEMBER_FUNCT();
+	double min_time;
+	double max_time;
+	m_cam.getExposureTimeRange(min_time, max_time);
 	valid_ranges.min_exp_time = min_time;
 	valid_ranges.max_exp_time = max_time;
+
+	m_cam.getLatTimeRange(min_time, max_time);
 	valid_ranges.min_lat_time = min_time;
 	valid_ranges.max_lat_time = max_time;
 }
+//-----------------------------------------------------
+

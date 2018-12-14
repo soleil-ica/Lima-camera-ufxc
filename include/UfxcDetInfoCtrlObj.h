@@ -1,7 +1,7 @@
 //###########################################################################
 // This file is part of LImA, a Library for Image Acquisition
 //
-// Copyright (C) : 2009-2018
+// Copyright (C) : 2009-2011
 // European Synchrotron Radiation Facility
 // BP 220, Grenoble 38043
 // FRANCE
@@ -19,25 +19,32 @@
 // You should have received a copy of the GNU General Public License
 // along with this program; if not, see <http://www.gnu.org/licenses/>.
 //###########################################################################
+//
+// UfxcDetInfoCtrlObj.h
+// Created on: October 24, 2018
+// Author: Arafat NOUREDDINE
 
 #ifndef UFXCDETINFOCTRLOBJ_H
 #define UFXCDETINFOCTRLOBJ_H
 
 #include "lima/Debug.h"
-
+//#include "Ufxc.h"
+#include "UfxcCompatibility.h"
 #include "lima/HwDetInfoCtrlObj.h"
 
 
 namespace lima {
 namespace Ufxc {
 
+
 class Camera;
+
 /*******************************************************************
  * \class DetInfoCtrlObj
  * \brief Control object providing Ufxc detector info interface
  *******************************************************************/
 
-class DetInfoCtrlObj: public HwDetInfoCtrlObj {
+class LIBUFXC_API DetInfoCtrlObj: public HwDetInfoCtrlObj {
 	DEB_CLASS_NAMESPC(DebModCamera, "DetInfoCtrlObj", "Ufxc");
 
 public:

@@ -1,7 +1,7 @@
 //###########################################################################
 // This file is part of LImA, a Library for Image Acquisition
 //
-// Copyright (C) : 2009-2018
+// Copyright (C) : 2009-2011
 // European Synchrotron Radiation Facility
 // BP 220, Grenoble 38043
 // FRANCE
@@ -19,190 +19,186 @@
 // You should have received a copy of the GNU General Public License
 // along with this program; if not, see <http://www.gnu.org/licenses/>.
 //###########################################################################
+//
+// UfxcCamera.h
+// Created on: November 28, 2018
+// Author: Arafat NOUREDDINE
 
-#ifndef UFXCCAMERA_H
-#define UFXCCAMERA_H
+#ifndef UFXCCAMERA_H_
+#define UFXCCAMERA_H_
 
-#include "lima/Debug.h"
-#include "lima/Constants.h"
+
+#include <ostream>
+#include <map>
+#include "UfxcCompatibility.h"
+#include "lima/HwMaxImageSizeCallback.h"
 #include "lima/HwBufferMgr.h"
-#include "lima/ThreadUtils.h"
+#include "lima/HwInterface.h"
+#include "lima/Debug.h"
+#include "ufxc/UFXCInterface.h"
 
+using namespace std;
 
-extern "C"
+namespace lima
 {
-#include "mx_util.h"
-#include "mx_record.h"
-#include "mx_image.h"
-#include "mx_area_detector.h"
-#include "mx_driver.h"
-#include "mx_version.h"
-}
+namespace Ufxc
+{
 
-namespace lima {
-namespace Ufxc {
-    
-class Camera
+const int xPixelSize = 75e-6; // pixel size is 75 micron
+const int yPixelSize = 75e-6; // pixel size is 75 micron
+
+class BufferCtrlObj;
+
+/*******************************************************************
+ * \class Camera
+ * \brief object controlling the Ufxc camera
+ *******************************************************************/
+class LIBUFXC_API Camera : public HwMaxImageSizeCallbackGen
 {
     DEB_CLASS_NAMESPC(DebModCamera, "Camera", "Ufxc");
-    friend class Interface;
+
 public:
+
+    // status values
 
     enum Status
     {
-        Ready, Exposure, Readout, Latency, Fault
-    };
+        Ready, // ready to start acquisition
+        Busy, // acquisition is running 
+        Fault, // acquisition stopped externally or unexpected error 
+        Configuring, // detector is configuring  
+    } ;
 
-    Camera(const std::string& camName, const std::string& databaseFile);
-    ~Camera();
+    //==================================================================
+    // constructor
+    Camera( const std::string&  config_ip_address, unsigned long config_port, //- IP Address and port for the config
+            const std::string&  SFP1_ip_address, unsigned long SFP1_port, //- IP Address and port for the SFP1
+            const std::string&  SFP2_ip_address, unsigned long SFP2_port, //- IP Address and port for the SFP2
+            const std::string&  SFP3_ip_address, unsigned long SFP3_port, //- IP Address and port for the SFP3
+            unsigned long       timeout_ms     //- timeout in ms
+            );
+    virtual ~Camera();
 
-    //-- Related to Ufxc specific features
-    void getExpMultiplier(double& exp_mult);
-    void setExpMultiplier(double exp_mult);
-    void getLatencyTime(double& period_time);
-    void setLatencyTime(double period_time);
-    void getGapMultiplier(double& gap_mult);
-    void setGapMultiplier(double gap_mult);
-    void getMxLibraryVersion(std::string& version);
-    void getInternalAcqMode(std::string& acq_mode);
-    void setInternalAcqMode(const std::string& mode);
-    void getReadoutDelayTime(double& readout_delay);
-    void setReadoutDelayTime(double readout_delay);
-    void getReadoutSpeed(bool& readout_speed);
-    void setReadoutSpeed(bool readout_speed);
-    void setExtraParam(const std::string& name, const std::string& val);
-    std::string getExtraParam(const std::string& name);
-    void getInitialDelayTime(double& initial_delay);
-    void setInitialDelayTime(double initial_delay);
-    void setCorrectionFlags(unsigned long);
-    double computeTimestamp(MX_IMAGE_FRAME* image_frame, long num_exp);
-
-    //-- Related to Acquisition
+    void init();
+    void reset();
+    void prepareAcq();
     void startAcq();
     void stopAcq();
-    void prepareAcq();
-    Status getStatus();
-    bool isBusy(); // return the state of the detector : true if detector is processing/running
+    void getStatus(Camera::Status& status);
+    int  getNbHwAcquiredFrames();
 
-    //-- Related to Synch control object
+    // -- detector info object
+    void getImageType(ImageType& type);
+    void setImageType(ImageType type);
+
+    void getDetectorType(std::string& type);
+    void getDetectorModel(std::string& model);
+    void getDetectorImageSize(Size& size);
+    void getPixelSize(double& sizex, double& sizey);
+
+    // -- Buffer control object
+    HwBufferCtrlObj* getBufferCtrlObj();
+
+    //-- Synch control object
     void setTrigMode(TrigMode mode);
     void getTrigMode(TrigMode& mode);
-    void getExpTime(double& exp_time);
+    bool checkTrigMode(TrigMode mode);
+
     void setExpTime(double exp_time);
-    int getNbHwAcquiredFrames();
+    void getExpTime(double& exp_time);
+
+    void setLatTime(double lat_time);
+    void getLatTime(double& lat_time);
+
+    void getExposureTimeRange(double& min_expo, double& max_expo) const;
+    void getLatTimeRange(double& min_lat, double& max_lat) const;
+
     void setNbFrames(int nb_frames);
     void getNbFrames(int& nb_frames);
 
-    //-- Related to Bin control object
-    void setBin(const Bin& bin);
-    void getBin(Bin& bin);
-    void checkBin(Bin& bin);
 
-    //-- Related to Roi control object
-    void checkRoi(const Roi& set_roi, Roi& hw_roi);
-    void setRoi(const Roi& set_roi);
-    void getRoi(Roi& hw_roi);
-
-    //-- Related to BufferCtrl	object
-
-    HwBufferCtrlObj* getBufferCtrlObj()
-    {
-        return &m_buffer_ctrl_obj;
-    };
-
-    //-- Related to DetInfo object
-    void getDetectorModel(std::string& model);
-    unsigned short getMaxWidth();
-    unsigned short getMaxHeight();
-    void setImageType(ImageType type);
-    void getImageType(ImageType& type);
+    ///////////////////////////////
+    // -- ufxc specific functions
+    ///////////////////////////////
+    void get_lib_version(std::string & version);
+    void get_firmware_version(std::string & version);
+    void get_detector_temperature(unsigned long temp);
 
 private:
-    void _open(); // open (reserves) the camera
-    void _close(); // close (release) the camera
-    void _armDetector(); // do arm/trigger on detector
 
-    //CmdThread class, used to handle some specific tasks (startAcq, stopAcq, ...)
+    //get frame from API/Driver/etc ...
+    void readFrame(void *bptr, int& frame_nb);
+    void setStatus(Camera::Status status, bool force);
+    //////////////////////////////
+    // -- ufxc specific members
+    //////////////////////////////
+    void SetHardwareRegisters();
 
-    class CameraThread : public CmdThread
-    {
-        DEB_CLASS_NAMESPC(DebModCamera, "CameraThread", "Ufxc");
-    public:
+    class AcqThread;
 
-        enum
-        { // Status
-            Ready = MaxThreadStatus, Exposure, Readout, Latency,
-        };
+    AcqThread *         m_acq_thread;
+    TrigMode            m_trigger_mode;
+    double              m_exp_time;
+    double              m_lat_time;
+    ImageType           m_image_type;
+    int                 m_nb_frames; // nos of frames to acquire
+    bool                m_thread_running;
+    bool                m_wait_flag;
+    bool                m_quit;
+    int                 m_acq_frame_nb; // nos of frames acquired
+    mutable             Cond m_cond;
+    long                m_depth;
+    Camera::Status      m_status;
 
-        enum
-        { // Cmd
-            StartAcq = MaxThreadCmd, StopAcq, StartMeasureDark, StartMeasureFloodField,
-        };
+    // UFXC lib main object
+    ufxclib::UFXCInterface* m_ufxc_interface;
+    // Registers configuration
+    std::map<ufxclib::T_AcquisitionConfigKey, std::string> m_acquisition_registers;
+    std::map<ufxclib::T_DetectorConfigKey, std::string> m_detector_registers;
+    std::map<ufxclib::T_MonitoringKey, std::string> m_monitor_registers;
 
-        CameraThread(Camera& cam);
+    // detector type
+    std::string m_detector_type;
 
-        virtual void start();
+    // detector model
+    std::string m_detector_model;
 
-        int getNbHwAcquiredFrames();
-        bool m_force_stop;
+    // detector firmware version
+    std::string m_detector_firmware_version;
 
-    protected:
-        virtual void init();
-        virtual void execCmd(int cmd);
-    private:
-        void execStartAcq();
-        void execStartMeasureDark();
-        void execStartMeasureFloodField();
-        Camera* m_cam;
-    };
-    friend class CameraThread;
+    // detector software version
+    std::string m_detector_software_version;
 
-    /* Lima buffer control object */
-    SoftBufferCtrlObj m_buffer_ctrl_obj;
-    unsigned short* m_frame;
-    unsigned short* m_pr_buffer;
+    // module firmware version
+    std::string m_module_firmware_version;
 
-    /*camera stuff*/
-    Camera::Status m_state;
-    std::string m_name;
-    std::string m_database_file_name;
-    double m_exposure_time;
-    double m_exposure_multiplier;
-    double m_latency_time;
-    double m_gap_multiplier;
-    double m_initial_delay_time;
-    double m_readout_delay_time;
-    double m_ccd_readout_time;
-    double m_time_stamp_0;
-    double m_time_stamp;
-    long   m_readout_speed;
+    // Buffer control object
+    SoftBufferCtrlObj   m_bufferCtrlObj;
 
-    unsigned long m_correction_flags;
-    int m_nb_frames;
-    int m_trigger_mode;
-    long m_max_width;
-    long m_max_height;
-    long m_depth;
-    std::string m_acq_mode_name;
-    std::string m_status;
-    Size m_frame_size;
+    // Lima event control object
+    HwEventCtrlObj      m_event_ctrl_obj;
 
-    /* main acquisition thread*/
-    CameraThread m_thread;
-    int m_acq_frame_nb;
+} ;
 
-    /*Mx stuff*/
-    struct mx_record_type* m_mx_record;
+/*******************************************************************
+ * \class AcqThread
+ * \brief Thread of acquisition
+ *******************************************************************/
+class Camera::AcqThread : public Thread
+{
+    DEB_CLASS_NAMESPC(DebModCamera, "Camera", "AcqThread");
+public:
+    AcqThread(Camera &aCam);
+    virtual ~AcqThread();
 
-    /*mutex stuff*/
-    mutable Cond m_cond;
+protected:
+    virtual void threadFunction();
 
-    long m_binning_x;
-    long m_binning_y;
-
-};
+private:
+    Camera& m_cam;
+} ;
 
 } // namespace Ufxc
 } // namespace lima
 
-#endif // UFXCCAMERA_H
+#endif /* UFXCCAMERA_H_ */

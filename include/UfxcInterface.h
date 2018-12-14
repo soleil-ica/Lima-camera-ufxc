@@ -1,7 +1,7 @@
 //###########################################################################
 // This file is part of LImA, a Library for Image Acquisition
 //
-// Copyright (C) : 2009-2018
+// Copyright (C) : 2009-2011
 // European Synchrotron Radiation Facility
 // BP 220, Grenoble 38043
 // FRANCE
@@ -19,12 +19,17 @@
 // You should have received a copy of the GNU General Public License
 // along with this program; if not, see <http://www.gnu.org/licenses/>.
 //###########################################################################
+//
+// UfxcInterface.h
+// Created on: October 24, 2018
+// Author: Arafat NOUREDDINE
 
-#ifndef UFXCINTERFACE_H
-#define UFXCINTERFACE_H
+#ifndef UFXCINTERFACE_H_
+#define UFXCINTERFACE_H_
 
 #include "lima/Debug.h"
-
+#include "UfxcCompatibility.h"
+#include "UfxcCamera.h"
 #include "UfxcDetInfoCtrlObj.h"
 #include "UfxcSyncCtrlObj.h"
 #include "lima/HwInterface.h"
@@ -34,41 +39,42 @@ namespace lima
 {
 namespace Ufxc
 {
+
 class Camera;
 /*******************************************************************
  * \class Interface
  * \brief Ufxc hardware interface
  *******************************************************************/
 
-class Interface: public HwInterface
+class LIBUFXC_API Interface : public HwInterface
 {
-
-DEB_CLASS_NAMESPC(DebModCamera, "UfxcInterface", "Ufxc");
+    DEB_CLASS_NAMESPC(DebModCamera, "Interface", "Ufxc");
 
 public:
-	Interface(Camera& cam);
-	virtual ~Interface();
-
-	//- From HwInterface
-	virtual void getCapList(CapList&) const;
-	virtual void reset(ResetLevel reset_level);
-	virtual void prepareAcq();
-	virtual void startAcq();
-	virtual void stopAcq();
-	virtual void getStatus(StatusType& status);
-	virtual int getNbHwAcquiredFrames();
-	
+    Interface(Camera& cam);
+    virtual ~Interface();
+    virtual void getCapList(CapList&) const;
+    virtual void reset(ResetLevel reset_level);
+    virtual void prepareAcq();
+    virtual void startAcq();
+    virtual void stopAcq();
+    virtual void getStatus(StatusType& status);
+    virtual int getNbHwAcquiredFrames();
     //! get the camera object to access it directly from client
-    Camera& getCamera() { return m_cam;}
+    Camera& getCamera()
+    {
+        return m_cam;
+    }
 
 private:
-	Camera& m_cam;
-	CapList m_cap_list;
-	DetInfoCtrlObj m_det_info;
-	SyncCtrlObj m_sync;      
-};
+    Camera& m_cam;
+    CapList m_cap_list;
+    DetInfoCtrlObj m_det_info;
+    HwBufferCtrlObj*  m_bufferCtrlObj;
+    SyncCtrlObj m_sync;  
+} ;
 
 } // namespace Ufxc
 } // namespace lima
 
-#endif // UFXCINTERFACE_H
+#endif /* UFXCINTERFACE_H_ */

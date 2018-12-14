@@ -1,7 +1,7 @@
 //###########################################################################
 // This file is part of LImA, a Library for Image Acquisition
 //
-// Copyright (C) : 2009-2018
+// Copyright (C) : 2009-2014
 // European Synchrotron Radiation Facility
 // BP 220, Grenoble 38043
 // FRANCE
@@ -23,40 +23,25 @@
 #include "UfxcCamera.h"
 #include "UfxcInterface.h"
 
-
 using namespace lima;
 using namespace lima::Ufxc;
-using namespace std;
-
-
-
 /*******************************************************************
  * \brief Hw Interface constructor
  *******************************************************************/
-
-Interface::Interface(Camera& cam) :
-		m_cam(cam), 
-		m_det_info(cam),
-        m_sync(cam),
-		m_bin(cam), 
-		m_roi(cam)
+Interface::Interface(Camera& cam):
+m_cam(cam),
+m_det_info(cam),
+m_sync(cam)
 {
 	DEB_CONSTRUCTOR();
-
 	HwDetInfoCtrlObj *det_info = &m_det_info;
 	m_cap_list.push_back(HwCap(det_info));
 
 	HwSyncCtrlObj *sync = &m_sync;
 	m_cap_list.push_back(HwCap(sync));
-    
+
 	HwBufferCtrlObj *buffer = cam.getBufferCtrlObj();
 	m_cap_list.push_back(HwCap(buffer));
-
-	HwRoiCtrlObj *roi = &m_roi;
-	m_cap_list.push_back(HwCap(roi));
-	
-	HwBinCtrlObj *bin = &m_bin;
-	m_cap_list.push_back(HwCap(bin));
 }
 
 //-----------------------------------------------------
@@ -65,12 +50,14 @@ Interface::Interface(Camera& cam) :
 Interface::~Interface()
 {
 	DEB_DESTRUCTOR();
+	delete &m_det_info;
+	delete &m_sync;
 }
 
 //-----------------------------------------------------
 //
 //-----------------------------------------------------
-void Interface::getCapList(HwInterface::CapList &cap_list) const
+void Interface::getCapList(CapList &cap_list) const
 {
 	DEB_MEMBER_FUNCT();
 	cap_list = m_cap_list;
@@ -84,7 +71,7 @@ void Interface::reset(ResetLevel reset_level)
 	DEB_MEMBER_FUNCT();
 	DEB_PARAM() << DEB_VAR1(reset_level);
 
-	stopAcq();
+	m_cam.reset();
 
 	Size image_size;
 	m_det_info.getMaxImageSize(image_size);
@@ -105,7 +92,6 @@ void Interface::reset(ResetLevel reset_level)
 void Interface::prepareAcq()
 {
 	DEB_MEMBER_FUNCT();
-
 	m_cam.prepareAcq();
 
 }
@@ -134,24 +120,23 @@ void Interface::stopAcq()
 void Interface::getStatus(StatusType& status)
 {
 
-	Camera::Status camera_status = m_cam.getStatus();
-	switch (camera_status)
-    {
-    case Camera::Ready:
-      status.set(HwInterface::StatusType::Ready);
-      break;
-    case Camera::Exposure:
-      status.set(HwInterface::StatusType::Exposure);
-      break;
-    case Camera::Readout:
-      status.set(HwInterface::StatusType::Readout);
-      break;
-    case Camera::Latency:
-      status.set(HwInterface::StatusType::Latency);
-      break;
-    case Camera::Fault:
-      status.set(HwInterface::StatusType::Fault);
-    }
+	Camera::Status camera_status = Camera::Ready;
+	m_cam.getStatus(camera_status);
+
+	switch(camera_status)
+	{
+		case Camera::Ready:
+			status.set(HwInterface::StatusType::Ready);
+			break;
+		case Camera::Busy:
+			status.set(HwInterface::StatusType::Exposure);
+			break;
+		case Camera::Configuring:
+			status.set(HwInterface::StatusType::Config);
+			break;
+		case Camera::Fault:
+			status.set(HwInterface::StatusType::Fault);
+	}
 }
 
 //-----------------------------------------------------

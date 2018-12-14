@@ -1,7 +1,7 @@
 //###########################################################################
 // This file is part of LImA, a Library for Image Acquisition
 //
-// Copyright (C) : 2009-2018
+// Copyright (C) : 2009-2011
 // European Synchrotron Radiation Facility
 // BP 220, Grenoble 38043
 // FRANCE
@@ -19,53 +19,58 @@
 // You should have received a copy of the GNU General Public License
 // along with this program; if not, see <http://www.gnu.org/licenses/>.
 //###########################################################################
+//
+// UfxcSyncCtrlObj.h
+// Created on: October 24, 2018
+// Author: Arafat NOUREDDINE
 
 #ifndef UFXCSYNCCTRLOBJ_H
 #define UFXCSYNCCTRLOBJ_H
 
 #include "lima/Debug.h"
-
+#include "UfxcCompatibility.h"
 #include "lima/HwSyncCtrlObj.h"
 #include "lima/HwInterface.h"
 
-namespace lima {
-namespace Ufxc {
-
-class Camera;
-
-/*******************************************************************
-    * \class SyncCtrlObj
-    * \brief Control object providing Ufxc synchronization interface
-    *******************************************************************/
-
-class SyncCtrlObj: public HwSyncCtrlObj
+namespace lima
 {
-DEB_CLASS_NAMESPC(DebModCamera, "SyncCtrlObj", "Ufxc");
+  namespace Ufxc
+  {
+    class Camera;
 
-public:
-    SyncCtrlObj(Camera& cam);
-    virtual ~SyncCtrlObj();
+    /*******************************************************************
+     * \class SyncCtrlObj
+     * \brief Control object providing Ufxc synchronization interface
+     *******************************************************************/
 
-    virtual bool checkTrigMode(TrigMode trig_mode);
-    virtual void setTrigMode(TrigMode trig_mode);
-    virtual void getTrigMode(TrigMode& trig_mode);
+    class LIBUFXC_API SyncCtrlObj: public HwSyncCtrlObj
+    {
+    DEB_CLASS_NAMESPC(DebModCamera, "SyncCtrlObj", "Ufxc");
 
-    virtual void setExpTime(double exp_time);
-    virtual void getExpTime(double& exp_time);
+    public:
+    	SyncCtrlObj(Camera& cam);
+    	virtual ~SyncCtrlObj();
 
-    virtual void setLatTime(double lat_time);
-    virtual void getLatTime(double& lat_time);
+    	virtual bool checkTrigMode(TrigMode trig_mode);
+    	virtual void setTrigMode(TrigMode trig_mode);
+    	virtual void getTrigMode(TrigMode& trig_mode);
 
-    virtual void setNbHwFrames(int nb_frames);
-    virtual void getNbHwFrames(int& nb_frames);
+    	virtual void setExpTime(double exp_time);
+    	virtual void getExpTime(double& exp_time);
 
-    virtual void getValidRanges(ValidRangesType& valid_ranges);
+    	virtual void setLatTime(double lat_time);
+    	virtual void getLatTime(double& lat_time);
 
-private:
-    Camera& m_cam;
-};
+    	virtual void setNbHwFrames(int nb_frames);
+    	virtual void getNbHwFrames(int& nb_frames);
 
-} // namespace Ufxc
+    	virtual void getValidRanges(ValidRangesType& valid_ranges);
+
+    private:
+    	Camera& m_cam;
+    };
+
+  } // namespace Ufxc
 } // namespace lima
 
 #endif // UFXCSYNCCTRLOBJ_H

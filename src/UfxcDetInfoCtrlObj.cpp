@@ -1,7 +1,7 @@
 //###########################################################################
 // This file is part of LImA, a Library for Image Acquisition
 //
-// Copyright (C) : 2009-2018
+// Copyright (C) : 2009-2014
 // European Synchrotron Radiation Facility
 // BP 220, Grenoble 38043
 // FRANCE
@@ -20,17 +20,19 @@
 // along with this program; if not, see <http://www.gnu.org/licenses/>.
 //###########################################################################
 
+#include <cstdlib>
+
 #include "UfxcCamera.h"
 #include "UfxcDetInfoCtrlObj.h"
-#include <limits>
 
 using namespace lima;
 using namespace lima::Ufxc;
 
-/*******************************************************************
- * \brief DetInfoCtrlObj constructor
- *******************************************************************/
-DetInfoCtrlObj::DetInfoCtrlObj(Camera& cam) : m_cam(cam)
+//-----------------------------------------------------
+//
+//-----------------------------------------------------
+DetInfoCtrlObj::DetInfoCtrlObj(Camera& cam):
+m_cam(cam)
 {
 	DEB_CONSTRUCTOR();
 }
@@ -49,22 +51,16 @@ DetInfoCtrlObj::~DetInfoCtrlObj()
 void DetInfoCtrlObj::getMaxImageSize(Size& size)
 {
 	DEB_MEMBER_FUNCT();
-	// get the max image size
-	getDetectorImageSize(size);
+	m_cam.getDetectorImageSize(size);
 }
 
 //-----------------------------------------------------
 //
 //-----------------------------------------------------
-void DetInfoCtrlObj::getDetectorImageSize(Size& size)
+void DetInfoCtrlObj::getDetectorImageSize(Size& image_size)
 {
 	DEB_MEMBER_FUNCT();
-	// get the max image size of the detector
-    
-	unsigned short width = m_cam.getMaxWidth();
-	unsigned short height = m_cam.getMaxHeight();
-
-	size = Size(width, height);
+	getMaxImageSize(image_size);
 }
 
 //-----------------------------------------------------
@@ -97,10 +93,10 @@ void DetInfoCtrlObj::setCurrImageType(ImageType image_type)
 //-----------------------------------------------------
 //
 //-----------------------------------------------------
-void DetInfoCtrlObj::getPixelSize(double& x_size, double& y_size)
+void DetInfoCtrlObj::getPixelSize(double& xsize, double& ysize)
 {
 	DEB_MEMBER_FUNCT();
-	x_size = y_size = std::numeric_limits<double>::quiet_NaN();;
+	m_cam.getPixelSize(xsize, ysize);
 }
 
 //-----------------------------------------------------
@@ -109,8 +105,7 @@ void DetInfoCtrlObj::getPixelSize(double& x_size, double& y_size)
 void DetInfoCtrlObj::getDetectorType(std::string& type)
 {
 	DEB_MEMBER_FUNCT();
-	type = "UFXC";
-
+	m_cam.getDetectorType(type);
 }
 
 //-----------------------------------------------------
@@ -127,6 +122,8 @@ void DetInfoCtrlObj::getDetectorModel(std::string& model)
 //-----------------------------------------------------
 void DetInfoCtrlObj::registerMaxImageSizeCallback(HwMaxImageSizeCallback& cb)
 {
+	DEB_MEMBER_FUNCT();
+	m_cam.registerMaxImageSizeCallback(cb);
 }
 
 //-----------------------------------------------------
@@ -134,6 +131,7 @@ void DetInfoCtrlObj::registerMaxImageSizeCallback(HwMaxImageSizeCallback& cb)
 //-----------------------------------------------------
 void DetInfoCtrlObj::unregisterMaxImageSizeCallback(HwMaxImageSizeCallback& cb)
 {
+	DEB_MEMBER_FUNCT();
+	m_cam.unregisterMaxImageSizeCallback(cb);
 }
-
 

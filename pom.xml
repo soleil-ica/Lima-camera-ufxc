@@ -9,7 +9,7 @@
 
     <groupId>fr.soleil.lib.Lima.Camera</groupId>
     <artifactId>LimaUfxc-${aol}-shared-${mode}</artifactId>
-    <version>0.0.1</version>
+    <version>1.0.0</version>
 
     <packaging>nar</packaging>
     <name>LimaUfxc</name>
@@ -22,14 +22,12 @@
     </scm>
 	
     <dependencies>
+        
         <dependency>
             <groupId>fr.soleil.lib</groupId>
             <artifactId>LimaCore-${aol}-shared-${mode}</artifactId>
             <version>1.7.7</version>
         </dependency>
-        <dependency>  
-        </dependency>
-    
     </dependencies>
 
     <build>
@@ -39,15 +37,30 @@
                 <artifactId>freehep-nar-plugin</artifactId>
                 <configuration>
                     <cpp>
-                        <sourceDirectory>src</sourceDirectory>
+                        <sourceDirectory>${project.basedir}</sourceDirectory>    
+                       
                         <includePaths>
                             <includePath>include</includePath>
+							<includePath>/home/informatique/ica/noureddine/DeviceSources/Lima/camera/ufxc/sdk/linux/include</includePath>
                         </includePaths>
+                        
                         <!-- define less verbose mode for gcc-->
                         <options>
                             <option>-w</option>
                         </options>
                     </cpp>
+                                          
+                   <linker>
+                        <libs>
+                            
+                            <lib>
+                                <name>UFXC</name>
+                                <type>shared</type>
+                                <directory>/home/informatique/ica/noureddine/DeviceSources/Lima/camera/ufxc/sdk/linux/lib</directory>
+                            </lib>
+                        </libs>
+                    </linker>
+                    					
                     <libraries>
                         <library>
                             <type>shared</type>
