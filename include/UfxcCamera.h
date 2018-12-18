@@ -127,7 +127,7 @@ public:
 private:
 
     //get frame from API/Driver/etc ...
-    void readFrame(void *bptr, int& frame_nb);
+    void readFrame(void);
     void setStatus(Camera::Status status, bool force);
     //////////////////////////////
     // -- ufxc specific members

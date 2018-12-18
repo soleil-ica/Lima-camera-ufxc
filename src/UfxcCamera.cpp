@@ -101,7 +101,7 @@ Camera::Camera(const std::string& config_ip_address, unsigned long config_port,
 		//soft_reset() once when init device
 		////m_ufxc_interface->get_config_acquisition_obj()->soft_reset();
 		//fix the acquisition mode
-		m_ufxc_interface->get_config_acquisition_obj()->set_acq_mode(ufxclib::T_Mode::software_raw);//pump_and_probe software_raw		
+		m_ufxc_interface->get_config_acquisition_obj()->set_acq_mode(ufxclib::T_AcquisitionMode::software_raw);//pump_and_probe software_raw		
 	}
 	catch(const ufxclib::Exception& ue)
 	{
@@ -243,14 +243,17 @@ void Camera::getStatus(Camera::Status& status)
 			break;
 		case ufxclib::T_DetectorStatus::E_DET_BUSY:
 			m_status = Camera::Busy;
-			DEB_TRACE() << "E_DET_BUSY";
+			//DEB_TRACE() << "E_DET_BUSY";
 			break;
 		case ufxclib::T_DetectorStatus::E_DET_DELAY_SCANNING:
 		case ufxclib::T_DetectorStatus::E_DET_CONFIGURING:
 			m_status = Camera::Configuring;
-			DEB_TRACE() << "E_DET_CONFIGURING";
+			//DEB_TRACE() << "E_DET_CONFIGURING";
 			break;
 		case ufxclib::T_DetectorStatus::E_DET_NOT_CONFIGURED:
+			m_status = Camera::Ready;
+//			DEB_TRACE() << "E_DET_NOT_CONFIGURED";
+			break;			
 		case ufxclib::T_DetectorStatus::E_DET_ERROR:
 			m_status = Camera::Fault;
 			DEB_TRACE() << "E_DET_ERROR";
@@ -277,66 +280,62 @@ void Camera::setStatus(Camera::Status status, bool force)
 //-----------------------------------------------------
 //
 //-----------------------------------------------------
-void Camera::readFrame(void *bptr, int& frame_nb)
+void Camera::readFrame(void)
 {
 	DEB_MEMBER_FUNCT();
 	DEB_TRACE() << "Camera::readFrame() ";
-	//@BEGIN : Get frame from Driver/API & copy it into bptr already allocated 
-	//			//get Acquisitions images
-	size_t IMAGE_DATA_SIZE = (m_ufxc_interface->get_data_receiver_obj()->get_frame_number_for_2_counters(ufxclib::T_Mode::software_raw) / COUNTER_NUMBER) * PACKET_DATA_LENGTH;
+	void* bptr;
+	StdBufferCbMgr& buffer_mgr = m_bufferCtrlObj.getBuffer();
+	//@BEGIN : 
+	//get Acquisitions images
+	size_t IMAGE_DATA_SIZE = (m_ufxc_interface->get_data_receiver_obj()->get_frame_number_for_2_counters(ufxclib::T_AcquisitionMode::software_raw) / COUNTER_NUMBER) * PACKET_DATA_LENGTH;
 	//= 112*1024+6; 112 is the frames number in each image, 1024 is the data size of each image. 
 	//header = 6 is the header size for each image and already extracted by the lib
-//	char filename[] = "/home/informatique/ica/noureddine/DeviceServers/ufxc_data.dat";
-//	std::ofstream output_file(filename, std::ios::out | std::ofstream::binary);
 	char ** imgBuffer;
 	imgBuffer = new char *[2 * m_nb_frames];
 	for(int i = 0;i < (2 * m_nb_frames);i++)
 		imgBuffer[i] = new char[IMAGE_DATA_SIZE];
+	DEB_TRACE()<<"nb. frames (requested) = "<<m_nb_frames;		
 	size_t frames_number = 0;
-	m_ufxc_interface->get_data_receiver_obj()->get_all_images(imgBuffer, ufxclib::T_Mode::software_raw, m_nb_frames, frames_number);
+	m_ufxc_interface->get_data_receiver_obj()->get_all_images(imgBuffer, ufxclib::T_AcquisitionMode::software_raw, m_nb_frames, frames_number);
 	//!< calculate the received images number for two counters
-	size_t received_images_number = frames_number / m_ufxc_interface->get_data_receiver_obj()->get_frame_number_for_2_counters(ufxclib::T_Mode::software_raw);
-
-	//Header only at beginning of file
-//	output_file.seekp(0, ios::end);
-//	if((long) 0 == output_file.tellp())
-//	{
-//		output_file << "IMAGE_DATA_SIZE = " << IMAGE_DATA_SIZE << " ;received_images_number = " << received_images_number << "; frames_number = " << frames_number << std::endl;
-//	}
-
-	//	for(int i = 0;i < (received_images_number * 2);i++)
-	//	{
-	//		for(int j = 0;j < IMAGE_DATA_SIZE;j++)
-	//		{
-	//			//std::cout << std::hex << int((unsigned char) (imgBuffer[i][j]));
-	//
-	//			output_file << int((unsigned char) (imgBuffer[i][j])) << " ";
-	//		}
-	//		output_file << std::endl;
-	//	}
-	//	output_file << std::endl;
-	//	output_file.flush();
-	int pixel = 0;
+	size_t received_images_number = frames_number / m_ufxc_interface->get_data_receiver_obj()->get_frame_number_for_2_counters(ufxclib::T_AcquisitionMode::software_raw);
+	DEB_TRACE()<<"nb. frames (received) = "<<received_images_number<<"\n";
+	std::stringstream filename("");	
+	std::ofstream output_file;
 	for(int i = 0;i < (received_images_number * 2);i++)
-	{
-		for(int j = 0;j < IMAGE_DATA_SIZE;j=j+7)
-		{			
-			//pixel 0
-			((unsigned short *)bptr)[pixel]= (unsigned short)((imgBuffer[i][j])<<8 | (imgBuffer[i][j+1]))>>2;//>>2
-			pixel++;
-			//pixel 1
-			((unsigned short *)bptr)[pixel]= (unsigned short)((imgBuffer[i][j+1])<<(8+6) | (imgBuffer[i][j+2])<<6 |(imgBuffer[i][j+3]))>>2;//>>2
-			pixel++;
-			//pixel 2
-			((unsigned short *)bptr)[pixel]= (unsigned short)((imgBuffer[i][j+3])<<(8+4) | (imgBuffer[i][j+4])<<4 |(imgBuffer[i][j+5]))>>2;//>>2
-			pixel++;
-			//pixel 3
-			((unsigned short *)bptr)[pixel]= (unsigned short)((imgBuffer[i][j+5])<<(8+2) | (imgBuffer[i][j+6]))>>2;//>>2
-			pixel++;			
+	{		
+		if(i % 2 == 0)
+		{
+			//Prepare Lima Frame Ptr 
+			DEB_TRACE() << "Prepare  Lima Frame Ptr("<<i/2<<")";			
+			bptr = buffer_mgr.getFrameBufferPtr(i/2);	
+			//memset(bptr, 0, 512*256*2);
+			filename.str("");
+			filename<<"/home/informatique/ica/noureddine/DeviceServers/ufxc_data_"<<i/2<<".dat";			
+			DEB_TRACE()<<"filename = "<<filename.str();
+			output_file.open(filename.str(), std::ios::out | std::ofstream::binary);
+		}		
+		
+		for(int j = 0;j < IMAGE_DATA_SIZE;j++)
+		{
+			output_file << int((unsigned char) (imgBuffer[i][j])) << " ";
 		}
-		std::cout<<"pixel = "<<pixel<<std::endl;		
+		//next line for the 2nd counter
+		output_file << std::endl;
+		
+		if(i % 2 == 1 )
+		{			
+			output_file.close();
+			//Push the image buffer through Lima 
+			DEB_TRACE() << "Declare a Lima new Frame Ready (" << m_acq_frame_nb << ")\n";
+			HwFrameInfoType frame_info;
+			frame_info.acq_frame_nb = m_acq_frame_nb;
+			buffer_mgr.newFrameReady(frame_info);
+			m_acq_frame_nb++;
+		}
 	}
-	frame_nb = received_images_number;
+
 	//@END	
 	m_status = Camera::Busy;
 }
@@ -357,7 +356,7 @@ void Camera::AcqThread::threadFunction()
 {
 	DEB_MEMBER_FUNCT();
 	//	AutoMutex aLock(m_cam.m_cond.mutex());
-	StdBufferCbMgr& buffer_mgr = m_cam.m_bufferCtrlObj.getBuffer();
+
 
 	while(!m_cam.m_quit)
 	{
@@ -394,28 +393,16 @@ void Camera::AcqThread::threadFunction()
 			{
 				//refresh status
 				m_cam.getStatus(status);
-				usleep(1000);//wait 1ms
+				usleep(10000);//wait 10ms
 			}
-			//Prepare Lima Frame Ptr 
-			DEB_TRACE() << "Prepare  Lima Frame Ptr";
-			void* bptr = buffer_mgr.getFrameBufferPtr(m_cam.m_acq_frame_nb);
-
+			
 			//Read Frame From API/Driver/Etc ... & Copy it into Lima Frame Ptr
-			DEB_TRACE() << "Read Frame From API/Driver/Etc ... & Copy it into Lima Frame Ptr";
-			int frame_nb=0;
-			m_cam.readFrame(bptr, frame_nb/*m_cam.m_acq_frame_nb*/);
-
-			//Push the image buffer through Lima 
-			DEB_TRACE() << "Declare a Lima new Frame Ready (" << m_cam.m_acq_frame_nb << ")";
-			HwFrameInfoType frame_info;
-			frame_info.acq_frame_nb = m_cam.m_acq_frame_nb;
-			buffer_mgr.newFrameReady(frame_info);
-			m_cam.m_acq_frame_nb++;
-			DEB_TRACE()<<"m_cam.m_acq_frame_nb = "<<m_cam.m_acq_frame_nb;
+			DEB_TRACE() << "Read Frame From API/Driver/Etc ... & Copy it into Lima Frame Ptr";				
+			m_cam.readFrame();
 		}
 		//auto t2 = Clock::now();
 		//DEB_TRACE() << "Delta t2-t1: " << std::chrono::duration_cast < std::chrono::nanoseconds > (t2 - t1).count() << " nanoseconds";
-		
+
 		//stopAcq only if this is not already done		
 		DEB_TRACE() << "AcqThread : stopAcq only if this is not already done ";
 		if(!m_cam.m_wait_flag)
@@ -423,7 +410,7 @@ void Camera::AcqThread::threadFunction()
 			DEB_TRACE() << " AcqThread: StopAcq";
 			m_cam.stopAcq();
 		}
-		
+
 		DEB_TRACE() << " AcqThread::threadfunction() Setting thread running flag to false";
 		AutoMutex lock(m_cam.m_cond.mutex());
 		//		aLock.lock();

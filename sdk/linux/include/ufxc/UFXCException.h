@@ -1,155 +1,237 @@
-//=============================================================================
-// UFXCException.h
-//=============================================================================
-// abstraction.......UFXC Application Programming Interface
-// class.............UFXC Error & Exception specification
-// original author...NEXEYA
-//=============================================================================
+/**
+ *  \file UFXCException.h
+ *  \brief header file
+ *  \author
+ *  \version 0.1
+ *  \date November 29 2018
+ *  Created on: June 29 2018
+ */
 
-#ifndef _UFXC_EXCEPTION_H_
-#define _UFXC_EXCEPTION_H_
+#ifndef UFXCLIB_EXCEPTION_H_
+#define UFXCLIB_EXCEPTION_H_
 
-// ============================================================================
-// DEPENDENCIES
-// ============================================================================
 #include <vector>
 #include <yat/utils/Logging.h>
 
-namespace ufxclib {
+/**
+ * \namespace ufxclib
+ */
+namespace ufxclib
+{
+/**
+ * \enum Severity
+ * \brief UFXC error severities
+ */
+typedef enum
+{
+    WARN, ERR, PANIC
 
-// ============================================================================
-// UFXC error severities 
-// ============================================================================
-typedef enum {
-  WARN, 
-  ERR, 
-  PANIC
 } Severity;
 
-// ============================================================================
-// The UFXC Error abstraction base class.  
-//
-// Contains 5 fields:
-// ° reason
-// ° description
-// ° origin
-// ° error code
-// ° severity
-// ============================================================================
+/**
+ * \class Error
+ * \brief The UFXC Error abstraction base class.
+ * Contains 5 fields:
+ * ° reason
+ * ° description
+ * ° origin
+ * ° error code
+ * ° severity
+ */
 class Error
 {
 public:
 
-  // Constructor. 
-  Error ();
+    /**
+    * \fn Error()
+    * \brief default constructor
+    * \param none
+	* \return none
+    */
+    Error();
 
-  // Constructor with parameters.
-  Error (const char *_reason,
-				 const char *_desc,
-				 const char *_origin,
-	       int _code = -1, 
-	       ufxclib::Severity _severity = ufxclib::ERR);
-  
+    /**
+    * \fn Error(const char *_reason, const char *_desc, const char *_origin, int _code = -1, ufxclib::Severity _severity = ufxclib::ERR)
+    * \brief Constructor with parameters.
+    * \param _reason
+    * * \param _desc
+    * * \param _origin
+    * * \param _code
+    * * \param _severity
+	* \return none
+    */
+    Error(const char *_reason, const char *_desc, const char *_origin, int _code = -1, ufxclib::Severity _severity = ufxclib::ERR);
 
-  // Constructor with parameters.
-  Error (const std::string& _reason,
-				 const std::string& _desc,
-				 const std::string& _origin, 
-	       int _code = -1, 
-	       ufxclib::Severity _severity = ufxclib::ERR);
+    /**
+    * \fn Error(const std::string& _reason, const std::string& _desc, const std::string& _origin, int _code = -1, ufxclib::Severity _severity = ufxclib::ERR)
+    * \brief Constructor with parameters.
+    * \param _reason
+    * * \param _desc
+    * * \param _origin
+    * * \param _code
+    * * \param _severity
+	* \return none
+    */
+    Error(const std::string& _reason, const std::string& _desc, const std::string& _origin, int _code = -1, ufxclib::Severity _severity = ufxclib::ERR);
 
-  // Copy constructor.
-  Error (const Error& _src);
+    /**
+    * \fn Error(const Error& _src)
+    * \brief Copy constructor
+    * \param _src
+	* \return none
+    */
+    Error(const Error& _src);
 
-  // Destructor.
-  virtual ~Error ();
+    /**
+    * \fn virtual ~Error()
+    * \brief destructor
+    * \param none
+	* \return none
+    */
+    virtual ~Error();
 
-  // Operator=
-  Error& operator= (const Error& _src);
+    /**
+    * \fn Error& operator=(const Error& _src)
+    * \brief Operator=
+    * \param _src Error object
+	* \return reference to an Error object
+    */
+    Error& operator=(const Error& _src);
 
-  // Error details: reason
-  std::string reason;
+    /// Error details: reason
+    std::string reason;
 
-  // Error details: description
-  std::string desc;
+    /// Error details: description
+    std::string desc;
 
-  // Error details: origin
-  std::string origin;
+    /// Error details: origin
+    std::string origin;
 
-  // Error details: code
-  int code;
+    /// Error details: code
+    int code;
 
-  // Error details: severity
-  ufxclib::Severity severity;
+    /// Error details: severity
+    ufxclib::Severity severity;
 };
 
-// ============================================================================
-// The UFXC error list.	
-// ============================================================================
+/**
+ * The UFXC error list.
+ *
+ */
 typedef std::vector<Error> ErrorList;
 
-// ============================================================================
-// The UFXC Exception abstraction base class.  
-//  
-// Contains a list of UFXC Errors.
-// 
-// ============================================================================
+/**
+ * \class Exception
+ * \brief The UFXC Exception abstraction base class.
+ *  Contains a list of UFXC Errors.
+ */
 class Exception
 {
 public:
 
-  // Constructor.
-  Exception ();
+    /**
+    * \fn Exception()
+    * \brief default constructor
+    * \param none
+	* \return none
+    */
+    Exception();
 
-  // Constructor with parameters.
-  Exception (const char *_reason,
-					   const char *_desc,
-					   const char *_origin,
-	           int _code = -1, 
-	           ufxclib::Severity _severity = ufxclib::ERR);
-  
-  // Constructor with parameters.
-  Exception (const std::string& _reason,
-					   const std::string& _desc,
-					   const std::string& _origin, 
-	           int _code = -1, 
-	           ufxclib::Severity _severity = ufxclib::ERR);
+    // Constructor with parameters.
+    /**
+    * \fn Exception(const char *_reason, const char *_desc, const char *_origin, int _code = -1, ufxclib::Severity _severity = ufxclib::ERR)
+    * \brief Constructor with parameters.
+    * \param _reason
+    * * \param _desc
+    * * \param _origin
+    * * \param _code
+    * * \param _severity
+	* \return none
+    */
+    Exception(const char *_reason, const char *_desc, const char *_origin, int _code = -1, ufxclib::Severity _severity = ufxclib::ERR);
 
-  // Constructor from Error class.
-  Exception (const Error& error);
+    /**
+    * \fn Exception(const std::string& _reason, const std::string& _desc, const std::string& _origin, int _code = -1, ufxclib::Severity _severity = ufxclib::ERR)
+    * \brief Constructor with parameters.
+    * \param _reason
+    * * \param _desc
+    * * \param _origin
+    * * \param _code
+    * * \param _severity
+	* \return none
+    */
+    Exception(const std::string& _reason, const std::string& _desc, const std::string& _origin, int _code = -1, ufxclib::Severity _severity = ufxclib::ERR);
 
+    //
+    /**
+    * \fn Exception(const Error& error)
+    * \brief Constructor from Error class.
+    * \param error Error object
+	* \return none
+    */
+    Exception(const Error& error);
 
-  // Copy constructor.
-  Exception (const Exception& _src);
+    /**
+    * \fnException(const Exception& _src)
+    * \brief Copy constructor
+    * \param _src
+	* \return none
+    */
+    Exception(const Exception& _src);
 
-  // Operator=
-  Exception& operator= (const Exception& _src); 
+    /**
+    * \fn Exception& operator=(const Exception& _src)
+    * \brief Operator=
+    * \param _src Error object
+	* \return reference to an Exception object
+    */
+    Exception& operator=(const Exception& _src);
 
-  // Destructor.
-  virtual ~Exception ();
+    /**
+    * \fn virtual ~Exception()
+    * \brief destructor
+    * \param none
+	* \return none
+    */
+    virtual ~Exception();
 
-  // Pushes the specified error into the errors list.
-  void push_error (const char *_reason,
-					         const char *_desc,
-						       const char *_origin, 
-		               int _code = -1, 
-		               ufxclib::Severity _severity = ufxclib::ERR);
+    /**
+    * \fn void push_error(const char *_reason, const char *_desc, const char *_origin, int _code = -1, ufxclib::Severity _severity = ufxclib::ERR)
+    * \brief Pushes the specified error into the errors list.
+    * \param _reason
+    * \param _desc
+    * \param _origin
+    * \param _code
+    * \param _severity
+	* \return void
+    */
+    void push_error(const char *_reason, const char *_desc, const char *_origin, int _code = -1, ufxclib::Severity _severity = ufxclib::ERR);
 
-  // Pushes the specified error into the errors list.
-  void push_error (const std::string& _reason,
-                   const std::string& _desc,
-                   const std::string& _origin, 
-                   int _code = -1, 
-                   ufxclib::Severity _severity = ufxclib::ERR);
+    /**
+    * \fn void push_error(const std::string& _reason, const std::string& _desc, const std::string& _origin, int _code = -1, ufxclib::Severity _severity = ufxclib::ERR)
+    * \brief Pushes the specified error into the errors list.
+    * \param _reason
+    * \param _desc
+    * \param _origin
+    * \param _code
+    * \param _severity
+	* \return void
+    */
+    void push_error(const std::string& _reason, const std::string& _desc, const std::string& _origin, int _code = -1, ufxclib::Severity _severity = ufxclib::ERR);
 
-  // Pushes the specified error into the errors list.
-  void push_error (const Error& _error);
+    /**
+    * \fn void push_error(const Error& _error)
+    * \brief Pushes the specified error into the errors list.
+    * \param _error an Error object
+	* \return void
+    */
+    void push_error(const Error& _error);
 
-  // The error list.
-  ErrorList errors;
+    /// The error list.
+    ErrorList errors;
 };
 
-} // namespace ufxclib
+} /// namespace ufxclib
 
-#endif // _UFXC_EXCEPTION_H_
+#endif /// UFXCLIB_EXCEPTION_H_
 

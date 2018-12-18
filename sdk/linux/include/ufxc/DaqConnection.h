@@ -1,89 +1,101 @@
-/********************************************//**
- *  DaqConnection.h
- ***********************************************/
-/********************************************//**
- *  Created on: 29 June 2018
- *  Author: GHAMMOURI Ayoub
- *  Class: DaqConnection
- *  Description: This class is used to manage the "control" TCP/IP socket to access to the DAQ board
- ***********************************************/
+/**
+ *  \file DaqConnection.h
+ *  \brief header file of DaqConnection class
+ *  \author Ayoub GHAMMOURI
+ *  \version 0.1
+ *  \date November 29 2018
+ *  Created on: June 29 2018
+ */
 
+#ifndef UFXCLIB_DAQCONNECTION_H_
+#define UFXCLIB_DAQCONNECTION_H_
 
-#ifndef DaqConnection_H_
-#define DaqConnection_H_
-
-/********************************************//**
- *  DEPENDENCIES
- ***********************************************/
 #include <sstream>
 #include <yat/network/ClientSocket.h>
 #include <yat/utils/XString.h>
-#include "UfxlibTypesAndConsts.h"
 
-namespace ufxclib {
+#include "ufxc/UFXCLibTypesAndConsts.h"
 
-/********************************************//**
- *  API DEFINITION
- ***********************************************/
+/**
+ * \namespace ufxclib
+ */
+namespace ufxclib
+{
 
+/**
+ *  \class DaqConnection
+ *  \brief This class is used to manage the "control" TCP/UDP and socket to access to the DAQ board.
+ *  This class is used for all TCP/UDP connection with DAQ. All UDP data passed through this class.
+ */
 class DaqConnection
 {
 
 public:
-  /**
-   * Constructor.
-   */
-  DaqConnection();
 
-  /**
-   * Destructor.
-   */
-  virtual ~DaqConnection();
+    /**
+    * \fn DaqConnection()
+    * \brief Default constructor
+    * \param none
+	* \return none
+    */
+    DaqConnection();
 
-  /**
-   * DAQ socket connection
-   */
-  void connect(std::string ip_address, unsigned int port, T_Protocol protocol = TCP)
-    throw (ufxclib::Exception);
-  /**
-   * DAQ socket disconnection
-   */
-  void disconnect()
-    throw (ufxclib::Exception);
+    /**
+    * \fn virtual ~DaqConnection()
+    * \brief destructor
+    * \param none
+	* \return none
+    */
+    virtual ~DaqConnection();
 
-  /**
-   * checks if DAQ is connected
-   */
-  bool isConnected();
+    /**
+    * \fn void connect(std::string ip_address, yat::uint32 port, T_Protocol protocol = TCP)
+    * \brief This function is used to connect to the DAQ. We can use the UDP or the TCP protocole to connect to the DAQ.
+    * \param ip_address: UDP or TCP ip. It is the first parameter to connect to the DAQ.
+    * \param port: UDP or TCP port. It is the second parameter to connect to the DAQ.
+    * \param protocol: UDP or TCP
+	* \return void
+    */
+    void connect(std::string ip_address, yat::uint32 port, T_Protocol protocol = TCP);
 
-  /**
-   * gets socket timeout (in ms)
-   */
-  unsigned int getTimeout();
+    /**
+    * \fn void disconnect()
+    * \brief This function is used to disconnect to the DAQ.
+    * \param none
+	* \return void
+    */
+    void disconnect();
 
-  /**
-   * sets socket timeout (in ms)
-   */
-  void setTimeout(unsigned int timeout_ms);
+    /**
+    * \fn bool is_connected()
+    * \brief This function is used to check if the application is connected to the DAQ.
+    * \param none
+	* \return bool : Connected if the function returned a true. Else disconnected
+    */
+    bool is_connected();
 
-  yat::ClientSocket * getSocket()
-  {
-	  return m_socket;
-  }
+    /**
+    * \fn yat::ClientSocket * get_socket()
+    * \brief get socket pointer
+    * \param none
+	* \return a pointer to yat::ClientSocket
+    */
+    yat::ClientSocket * get_socket()
+    {
+        return m_socket;
+    }
 
 protected:
-  /**
-   * socket ptr
-   */
-  yat::ClientSocket * m_socket;
+
+    /// socket ptr
+    yat::ClientSocket * m_socket;
 
 private:
-  /**
-   * socket timeout (ms)
-   */
-  unsigned int m_tmo;
 
-  };
-} //!< namespace ufxclib
+    /// socket timeout_ms (ms)
+    yat::uint32 m_tmo_ms;
 
-#endif //!< DaqConnection_H_
+};
+} /// namespace ufxclib
+
+#endif /// UFXCLIB_DAQCONNECTION_H_

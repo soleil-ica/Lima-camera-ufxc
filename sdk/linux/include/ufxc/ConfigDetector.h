@@ -1,146 +1,242 @@
-/********************************************//**
- *  ConfigDetector.h
- ***********************************************/
-/********************************************//**
- *  Created on: 30 juil. 2018
- *  Author: GHAMMOURI Ayoub
- *  Class: ConfigDetector
- *  Description:
- ***********************************************/
+/**
+ *  \file ConfigDetector.h
+ *  \brief header file of ConfigDetector class
+ *  \author Ayoub GHAMMOURI
+ *  \version 0.1
+ *  \date November 29 2018
+ *  Created on: July 30 2018
+ */
 
-#ifndef UFXCLIB_SRC_CONFIGDETECTOR_H_
-#define UFXCLIB_SRC_CONFIGDETECTOR_H_
+#ifndef UFXCLIB_CONFIGDETECTOR_H_
+#define UFXCLIB_CONFIGDETECTOR_H_
 
-/********************************************//**
- *  DEPENDENCIES
- ***********************************************/
-#include "UFXC/UfxlibTypesAndConsts.h"
-#include "UFXC/ConfigPortInterface.h"
+#include "ufxc/ConfigPortInterface.h"
+#include "ufxc/UFXCLibTypesAndConsts.h"
 
-namespace ufxclib {
-class ConfigDetector {
+/**
+ * \namespace ufxclib
+ */
+namespace ufxclib
+{
+/**
+ *  \class ConfigDetector
+ *  \brief This class contains the necessary functions for the detector configuration.
+ *
+*/
+class ConfigDetector
+{
 public:
-	ConfigDetector(ConfigPortInterface * configPortInterface);
 
-	virtual ~ConfigDetector();
+    /**
+    * \fn ConfigDetector(ConfigPortInterface * config_port_interface)
+    * \brief constructor
+    * \param config_port_interface : ConfigPortInterface object for all TCP communications with DAQ.
+	* \return none
+    */
+    ConfigDetector(ConfigPortInterface * config_port_interface);
 
-	//!<Set detector global configuration register names
-	//!< @param map Register list
-	void setDetectorRegisterNames(std::map<T_DetectorConfigKey, std::string> map)
-	  throw (ufxclib::Exception);
+    /**
+    * \fn virtual ~ConfigDetector()
+    * \brief destructor
+    * \param none
+	* \return none
+    */
+    virtual ~ConfigDetector();
 
-    //!< get CSA polarity
-    //!< @return CSA polarity
-	bool getCSAPolarity()
-		throw (ufxclib::Exception);
+    /**
+    * \fn void set_detector_registers_names(std::map<T_DetectorConfigKey, std::string> map)
+    * \brief Set detector registers names
+    * \param map : it is a map contain the list of registers names for the detector config
+	* \return void
+    */
+    void set_detector_registers_names(std::map<T_DetectorConfigKey, std::string> map);
 
-    //!< set CSA polarity
-	// @param bool
-	void setCSAPolarity(bool polarity)
-		throw (ufxclib::Exception);
+    /**
+    * \fn bool get_CSA_polarity()
+    * \brief Get CSA polarity/charge collection mode, common to all pixels
+    * \param none
+	* \return CSA polarity/charge collection mode, common to all pixels
+    */
+    bool get_CSA_polarity();
 
-    //!< get shaper feedback control
-    //!< @return shaper feedback control
-	bool getShaperFeedback()
-		throw (ufxclib::Exception);
+    /**
+    * \fn void set_CSA_polarity(bool polarity)
+    * \brief Set CSA polarity/charge collection mode, common to all pixels
+    * \param polarity : CSA polarity/charge collection mode, common to all pixels
+	* \return void
+    */
+    void set_CSA_polarity(bool polarity);
 
-    //!< set shaper feedback control
-	// @param bool
-	void setShaperFeedback(bool feedback)
-		throw (ufxclib::Exception);
+    /**
+    * \fn bool get_shaper_feedback()
+    * \brief Get shaper feedback control, common to all pixels
+    * \param none
+	* \return Shaper feedback control, common to all pixels
+    */
+    bool get_shaper_feedback();
 
-    //!< get CSA current
-    //!< @return CSA current
-	unsigned int getBCAS()
-		throw (ufxclib::Exception);
+    /**
+    * \fn void set_shaper_feedback(bool feedback)
+    * \brief Set shaper feedback control, common to all pixels
+    * \param feedback : Shaper feedback control, common to all pixels
+	* \return void
+    */
+    void set_shaper_feedback(bool feedback);
 
-    //!< set CSA current
-    //!< @param BCAS value
-	void setBCAS(unsigned int bcas)
-		throw (ufxclib::Exception);
+    /**
+    * \fn yat::uint32 get_BCAS()
+    * \brief Get CSA current in input transistor, common to all pixels
+    * \param none
+	* \return CSA current in input transistor, common to all pixels
+    */
+    yat::uint32 get_BCAS();
 
-    //!< get CSA feedback
-    //!< @return CSA feedback
-	unsigned int getBKRUM()
-		throw (ufxclib::Exception);
+    /**
+    * \fn void set_BCAS(yat::uint32 bcas)
+    * \brief Set CSA current in input transistor, common to all pixels
+    * \param bcas : CSA current in input transistor, common to all pixels
+	* \return void
+    */
+    void set_BCAS(yat::uint32 bcas);
 
-    //!< set CSA feedback
-    //!< @param BKRUM value
-	void setBKRUM (unsigned int bkrum)
-		throw (ufxclib::Exception);
+    /**
+    * \fn yat::uint32 get_BKRUM()
+    * \brief Get CSA feedback, common to all pixels
+    * \param none
+	* \return CSA feedback, common to all pixels
+    */
+    yat::uint32 get_BKRUM();
 
-    //!< get Trim DAC current in input transistor
-    //!< @return Trim DAC current
-	unsigned int getBTRIM()
-		throw (ufxclib::Exception);
+    /**
+    * \fn void set_BKRUM(yat::uint32 bkrum)
+    * \brief Set CSA feedback, common to all pixels
+    * \param bkrum : CSA feedback, common to all pixels
+	* \return void
+    */
+    void set_BKRUM(yat::uint32 bkrum);
 
-    //!< set Trim DAC current
-    //!< @param BTRIM value
-	void setBTRIM(unsigned int btrim)
-		throw (ufxclib::Exception);
+    /**
+    * \fn yat::uint32 get_BTRIM()
+    * \brief Get trim DAC current, common to all pixels
+    * \param none
+	* \return Trim DAC current, common to all pixels
+    */
+    yat::uint32 get_BTRIM();
 
-    //!< get CSA current
-    //!< @return CSA current
-	unsigned int getBREF()
-		throw (ufxclib::Exception);
+    /**
+    * \fn void set_BTRIM(yat::uint32 btrim)
+    * \brief Set trim DAC current, common to all pixels
+    * \param btrim : Trim DAC current, common to all pixels
+	* \return void
+    */
+    void set_BTRIM(yat::uint32 btrim);
 
-    //!< set CSA current
-    //!< @param BREF value
-	void setBREF(unsigned int bref)
-		throw (ufxclib::Exception);
+    /**
+    * \fn yat::uint32 get_BREF()
+    * \brief Get CSA current, common to all pixels
+    * \param none
+	* \return CSA current, common to all pixels
+    */
+    yat::uint32 get_BREF();
 
-    //!< get shaper current
-    //!< @return shaper current
-	unsigned int getBSH()
-		throw (ufxclib::Exception);
+    /**
+    * \fn void set_BREF(yat::uint32 bref)
+    * \brief Set CSA current, common to all pixels
+    * \param bref : CSA current, common to all pixels
+	* \return void
+    */
+    void set_BREF(yat::uint32 bref);
 
-    //!< set shaper current
-    //!< @param BSH value
-	void setBSH(unsigned int bsh)
-		throw (ufxclib::Exception);
+    /**
+    * \fn yat::uint32 get_BSH()
+    * \brief Get shaper current, common to all pixels
+    * \param none
+	* \return Shaper current, common to all pixels
+    */
+    yat::uint32 get_BSH();
 
-    //!< get discriminator current
-    //!< @return discriminator current
-	unsigned int getBDIS()
-		throw (ufxclib::Exception);
+    /**
+    * \fn void set_BSH(yat::uint32 bsh)
+    * \brief Set shaper current, common to all pixels
+    * \param bsh : shaper current, common to all pixels
+	* \return void
+    */
+    void set_BSH(yat::uint32 bsh);
 
-    //!< set discriminator current
-    //!< @param BDIS value
-	void setBDIS(unsigned int bdis)
-		throw (ufxclib::Exception);
+    /**
+    * \fn yat::uint32 get_BDIS()
+    * \brief Get discriminator current, common to all pixels
+    * \param none
+	* \return Discriminator current, common to all pixels
+    */
+    yat::uint32 get_BDIS();
 
-    //!< get shaper feedback control
-    //!< @return shaper feedback control
-	unsigned int getBGSH()
-		throw (ufxclib::Exception);
+    /**
+    * \fn void set_BDIS(yat::uint32 bdis)
+    * \brief Set discriminator current, common to all pixels
+    * \param bdis : Discriminator current, common to all pixels
+	* \return void
+    */
+    void set_BDIS(yat::uint32 bdis);
 
-    //!< set shaper feedback control
-    //!< @param BGSH value
-	void setBGSH(unsigned int bgsh)
-		throw (ufxclib::Exception);
+    /**
+    * \fn yat::uint32 get_BGSH()
+    * \brief Get shaper feedback control in case DET_GLB_FS=0, common to all pixels
+    * \param none
+	* \return Shaper feedback control in case DET_GLB_FS=0, common to all pixels
+    */
+    yat::uint32 get_BGSH();
 
-    //!< get reference level DAC
-    //!< @return reference level DAC
-	unsigned int getBR()
-		throw (ufxclib::Exception);
+    /**
+    * \fn void set_BGSH(yat::uint32 bgsh)
+    * \brief Set shaper feedback control in case DET_GLB_FS=0, common to all pixels
+    * \param bgsh : shaper feedback control in case DET_GLB_FS=0, common to all pixels
+	* \return void
+    */
+    void set_BGSH(yat::uint32 bgsh);
 
-    //!< set reference level DAC
-    //!< @param BR value
-	void setBR(unsigned int br)
-		throw (ufxclib::Exception);
+    /**
+    * \fn yat::uint32 get_BR()
+    * \brief Get reference level DAC, common to all pixels
+    * \param none
+	* \return Reference level DAC, common to all pixels
+    */
+    yat::uint32 get_BR();
 
-	//!< Apply detector configuration:
-	void applyDetectorConfig()
-		throw (ufxclib::Exception);
+    /**
+    * \fn void set_BR(yat::uint32 br)
+    * \brief Set reference level DAC, common to all pixels
+    * \param br : reference level DAC, common to all pixels
+	* \return void
+    */
+    void set_BR(yat::uint32 br);
 
-	//TODO:
-//	•	Set pixel configuration:
-//	setPixelConfig(unsigned int [][] pixels) // pixels is a pointer to a 2D table
+    /**
+    * \fn void apply_detector_config()
+    * \brief Function to configure all detectors global and local configuration registers located inside the detector readout circuits.
+    *  The global registers define all common parameters of the pixel analog fronted such as: sensor polarity, internal DACs reference signal, fronted speed and others.
+    *  The local configuration registers are unique for every pixel and are necessary to correct for fabrication mismatch between pixels during fabrication process, such as DC offset and gain, and supplementary fronted configuration, i.e. gain.
+    *  For each detector configuration a calibration file will be delivered with all local and global registers.    *
+    * \param none
+	* \return void
+    */
+    void apply_detector_config();
+
+    /**
+    * \fn void set_pixel_config(std::vector<std::vector<std::uint32_t>> pixels)
+    * \brief After reading the PIXCONFIG from the config file, we set the config pixels in a vector and we pass this array as parameters to the set_pixel_config function.
+    * This table consists of 7168 rows and 8 columns. The columns are ordered from left to right as follows: 96B, 64B, 32B, 0B, 96A, 64A, 32A, and 0A.
+    * each value in the array is 32-bit encoded.
+    * In this function, the values of the array are sent to DAQ in a specific order.
+    * \param pixels: pixels config vector
+	* \return void
+    */
+    void set_pixel_config(std::vector<std::vector<std::uint32_t>> pixels);
 
 private:
-	std::map<T_DetectorConfigKey, std::string> m_Detector_registers;
-	ConfigPortInterface * m_configPortInterface;
+    std::map<T_DetectorConfigKey, std::string> m_detector_registers;
+    ConfigPortInterface * m_config_port_interface;
 };
-} //!< namespace ufxclib
+} /// namespace ufxclib
 
-#endif ///!< UFXCLIB_SRC_CONFIGDETECTOR_H_
+#endif //// UFXCLIB_CONFIGDETECTOR_H_

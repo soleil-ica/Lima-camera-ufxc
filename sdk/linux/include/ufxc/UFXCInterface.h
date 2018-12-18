@@ -1,73 +1,147 @@
-/********************************************//**
- *  UFXCInterface.h
- ***********************************************/
-/********************************************//**
- *  Created on: 21 août 2018
- *  Author: GHAMMOURI Ayoub
- *  Class: UFXCInterface
- *  Description:
- ***********************************************/
+/**
+ *  \file UFXCInterface.h
+ *  \brief header file of the UFXCInterface class
+ *  \author Ayoub GHAMMOURI
+ *  \version 0.1
+ *  \date November 29 2018
+ *  Created on: August 21 2018
+ */
 
-#ifndef UFXCLIB_SRC_UFXCINTERFACE_H_
-#define UFXCLIB_SRC_UFXCINTERFACE_H_
+#ifndef UFXCLIB_UFXCINTERFACE_H_
+#define UFXCLIB_UFXCINTERFACE_H_
 
-/********************************************//**
- *  DEPENDENCIES
- ***********************************************/
-#include "UFXC/ConfigPortInterface.h"
-#include "UFXC/DaqMonitoring.h"
-#include "UFXC/ConfigDetector.h"
-#include "UFXC/ConfigAcquisition.h"
-#include "UFXC/UFXCException.h"
-#include "UFXC/UfxlibTypesAndConsts.h"
 #include <fstream>
 #include <yat/file/FileName.h>
-#include "UFXC/CaptureManager.h"
-#include "UFXC/DaqConnection.h"
-#include "UFXC/DataReceiver.h"
 
+#include "ufxc/CaptureManager.h"
+#include "ufxc/ConfigAcquisition.h"
+#include "ufxc/ConfigDetector.h"
+#include "ufxc/ConfigPortInterface.h"
+#include "ufxc/DaqConnection.h"
+#include "ufxc/DaqMonitoring.h"
+#include "ufxc/DataReceiver.h"
+#include "ufxc/UFXCLibTypesAndConsts.h"
+#include "ufxc/UFXCException.h"
+
+/**
+ * \namespace ufxclib
+ */
 namespace ufxclib
 {
-	class UFXCInterface
-	{
-		public:
-			UFXCInterface();
-			virtual ~UFXCInterface();
 
-			//!< for open TCP/UDP connection
-			//!< @param TCP IP, and three the UDP IP
-			void openCom(T_UfxcLibCnx tcpCnx,  T_UfxcLibCnx SFPpCnx1, T_UfxcLibCnx SFPpCnx2, T_UfxcLibCnx SFPpCnx3) throw (ufxclib::Exception);
+/**
+ * \class UFXCInterface
+ * \brief This class is the first and the only interface with the final client.
+ * For access to the functions of other classes you have to use this class.
+ */
+class UFXCInterface
+{
+public:
 
-			//!< close TCP/UDP connection
-			void closeComm() throw (ufxclib::Exception);
+    /**
+    * \fn UFXCInterface()
+    * \brief default constructor
+    * \param none
+	* \return none
+    */
+    UFXCInterface();
 
-			//!< return a DaqMonitoring object
-			DaqMonitoring * getDaqMonitoringObj() throw (ufxclib::Exception);
+    /**
+    * \fn virtual ~UFXCInterface()
+    * \brief destructor
+    * \param none
+	* \return none
+    */
+    virtual ~UFXCInterface();
 
-			//!< return a ConfigDetector object
-			ConfigDetector * getConfigDetectorObj() throw (ufxclib::Exception);
+    /**
+    * \fn void open_connection(T_UfxcLibCnx tcpCnx, T_UfxcLibCnx SFPpCnx1, T_UfxcLibCnx SFPpCnx2, T_UfxcLibCnx SFPpCnx3)
+    * \brief open one TCP connection and tree UDP connection with DAQ
+    * \param tcpCnx struct contain the tcp connection parameters (IP, Port, ...).
+    * \param SFPpCnx1 struct contain the SFP1 connection parameters (IP, Port, ...).
+    * \param SFPpCnx2 struct contain the SFP2 connection parameters (IP, Port, ...).
+    * \param SFPpCnx3 struct contain the SFP3 connection parameters (IP, Port, ...).
+	* \return void
+    */
+    void open_connection(T_UfxcLibCnx tcpCnx, T_UfxcLibCnx SFPpCnx1, T_UfxcLibCnx SFPpCnx2, T_UfxcLibCnx SFPpCnx3);
 
-			//!< return a DataReceiver object
-			DataReceiver * getDataReceiverObj() throw (ufxclib::Exception);
+    /**
+    * \fn void close_connection()
+    * \brief close the TCP connection and the tree UDP connection with DAQ
+    * \param none
+	* \return void
+    */
+    void close_connection();
 
-			//!< return a ConfigAcquisition object
-			ConfigAcquisition * getConfigAcquisitionObj() throw (ufxclib::Exception);
+    /**
+     * \fn DaqMonitoring * get_daq_monitoring_obj()
+     * \brief get a DaqMonitoring object to access to the members of this class.
+     * \param none
+ 	* \return DaqMonitoring object
+     */
+    DaqMonitoring * get_daq_monitoring_obj();
 
-			//!<The client fills a text file containing the detector configuration
-			//!<Then the client calls the setDetectorConfigFile() function.
-			//!<Set detector configuration by file:
-			void setDetectorConfigFile (std::string file_path_and_name) throw (ufxclib::Exception);
+    /**
+     * \fn ConfigDetector * get_config_detector_obj()
+     * \brief get a ConfigDetector object to access to the members of this class.
+     * \param none
+ 	* \return ConfigDetector object
+     */
+    ConfigDetector * get_config_detector_obj();
 
-		private:
-			DaqMonitoring * m_daqMonitoring;
-			ConfigDetector * m_configDetector;
-			DataReceiver * m_dataReceiver;
-			ConfigAcquisition * m_configAcquisition;
-			ConfigPortInterface * m_configPortInterface;
-			DaqConnection * m_daqConnectionSFP1;
-			DaqConnection * m_daqConnectionSFP2;
-			DaqConnection * m_daqConnectionSFP3;
-			CaptureManager * m_captureManager;
-	};
-}//!< namespace ufxclib
-#endif //!< UFXCLIB_SRC_UFXCINTERFACE_H_
+    /**
+     * \fn DataReceiver * get_data_receiver_obj()
+     * \brief get a DataReceiver object to access to the members of this class.
+     * \param none
+ 	* \return DataReceiver object
+     */
+    DataReceiver * get_data_receiver_obj();
+
+    /**
+     * \fn ConfigAcquisition * get_config_acquisition_obj()
+     * \brief get a ConfigAcquisition object to access to the members of this class.
+     * \param none
+ 	* \return ConfigAcquisition object
+     */
+    ConfigAcquisition * get_config_acquisition_obj();
+
+    /**
+    * \fn void set_detector_config_file(std::string file_path_and_name)
+    * \brief this function read informations from the config file. And recode these informations in the lib.
+    * The format of the information in the config file is in the form of "name = value".
+    * \param file_path_and_name
+	* \return void
+    */
+    void set_detector_config_file(std::string file_path_and_name);
+
+    /**
+     * \fn std::string get_UFXC_lib_version()
+     * \brief get the library version
+     * \param file_path_and_name
+ 	* \return library version
+     */
+    std::string get_UFXC_lib_version();
+
+private:
+    DaqMonitoring * m_daq_monitoring;
+    ConfigDetector * m_config_detector;
+    DataReceiver * m_data_receiver;
+    ConfigAcquisition * m_config_acquisition;
+    ConfigPortInterface * m_config_port_interface;
+    DaqConnection * m_daq_connection_SFP1;
+    DaqConnection * m_daq_connection_SFP2;
+    DaqConnection * m_daq_connection_SFP3;
+    CaptureManager * m_capture_manager;
+
+    /**
+    * \fn void split_text(const std::string &txt, std::vector<std::vector<std::uint32_t>> &vect, char ch)
+    * \brief split a text to many strings. Convert string to uint32_t. And puts these values in a new vector.
+    * \param txt text to split
+    * \param vect it is an output vector filled with the words that constitutes the text.
+    * \param ch separator between 2 strings of this text
+	* \return void
+    */
+    void split_text(const std::string &txt, std::vector<std::vector<std::uint32_t>> &vect, char ch);
+};
+}/// namespace ufxclib
+#endif /// UFXCLIB_UFXCINTERFACE_H_

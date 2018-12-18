@@ -1,380 +1,303 @@
-/********************************************//**
- *  ConfigPortInterface.h
- ***********************************************/
-/********************************************//**
- *  Created on: 04 July 2018
- *  Author: GHAMMOURI Ayoub
- *  Class: ConfigPortInterface
- *  Description:
- ***********************************************/
+/**
+ *  \file ConfigPortInterface.h
+ *  \brief header file of ConfigPortInterface class
+ *  \author Ayoub GHAMMOURI
+ *  \version 0.1
+ *  \date November 29 2018
+ *  Created on: July 04  2018
+ */
 
-#ifndef CONFIGPORTINTERFACE_H_
-#define CONFIGPORTINTERFACE_H_
+#ifndef UFXCLIB_CONFIGPORTINTERFACE_H_
+#define UFXCLIB_CONFIGPORTINTERFACE_H_
 
-/********************************************//**
- *  DEPENDENCIES
- ***********************************************/
-#include "DaqConnection.h"
+#include "ufxc/DaqConnection.h"
 
-namespace ufxclib {
-/********************************************//**
-* Configuration registers
- ***********************************************/
-const std::string kUFXC_REGISTER_LENGTH = ".LENGTH?\n";
-const std::string kUFXC_REGISTER_MAX_LENGTH = ".MAX_LENGTH?\n";
-
-
-/********************************************//**
- *  API DEFINITION
- ***********************************************/
-class ConfigPortInterface : public DaqConnection
+/**
+ * \namespace ufxclib
+ */
+namespace ufxclib
+{
+/**
+ *  \class ConfigPortInterface
+ *  \brief This class is used for all TCP connection with DAQ. All set/get DAQ registers passed through this class.
+ */
+class ConfigPortInterface: public DaqConnection
 {
 
 public:
-  //!< Constructor.
-  ConfigPortInterface();
-  ConfigPortInterface(yat::ClientSocket * socket);
 
-  //!< Destructor.
-  virtual ~ConfigPortInterface();
+    /**
+    * \fn ConfigPortInterface()
+    * \brief Default constructor
+    * \param none
+    * \return none
+    */
+    ConfigPortInterface();
 
-  //!< Open DAQ box connection(s)
-  //!< @param cnx DAQ box connection(s) definition
-  //!< Opens the CONFIG connection.
-  //!< Opens the DATA connection if data port is not null.
-  void open(T_UfxcLibCnx cnx)
-    throw (ufxclib::Exception);
+    /**
+    * \fn virtual ~ConfigPortInterface()
+    * \brief destructor
+    * \param none
+	* \return none
+    */
+    virtual ~ConfigPortInterface();
 
-  //!< Close connection(s) (if not already disconnected)
-  void close()
-    throw (ufxclib::Exception);
+    /**
+    * \fn void open(T_UfxcLibCnx cnx)
+    * \brief Open DAQ connection(s). This connection is used for all set/get DAQ registers values.
+    * \param cnx : structure contains the connection parameters.
+	* \return void
+    */
+    void open(T_UfxcLibCnx cnx);
 
+    /**
+    * \fn void close()
+    * \brief Close DAQ connection(s) (if not already disconnected)
+    * \param none
+	* \return void
+    */
+    void close();
 
-  //!< Read register
-  //!< @param name Register name
-  //!< @return Register value
-  template <class T>
-  T readRegister(std::string name)
-    throw (ufxclib::Exception)
-  {
-    std::string l_str = "";
-    T l_result;
-
-    if (!m_socket)
+    /**
+    * \fn template<class T> T read_register(std::string name)
+    * \brief read the register value
+    * \param name : register name
+	* \return Register value
+    */
+    template<typename T>
+    T read_register(const std::string& name)
     {
-        throw ufxclib::Exception("INTERNAL_ERROR",
-                     "Cannot access socket ptr!",
-                    "ConfigPortInterface::readRegister");
-    }
-    try
-    {
-      //!< write request on the underlying socket
-      std::string l_request = name + std::string("?\n");
-      m_socket->send(l_request);
+        yat::log_verbose("UFXCLib", "ConfigPortInterface::read_register() entering...");
+        yat::log_verbose("UFXCLib", " --> register name: %s", name.c_str());
 
-      //!< wait then get data from peer
-      m_socket->wait_input_data(kUFXC_BOX_WAIT);
-      m_socket->receive(l_str);
-    }
-    catch (const yat::SocketException & se)
-    {
-      throw ufxclib::Exception("SOCKET_ERROR",
-        se.text().c_str(),
-        "ConfigPortInterface::readRegister");
-    }
-    catch (...)
-    {
-      throw ufxclib::Exception("UNKNOWN_ERROR",
-        "Cannot read register: unknown error!",
-        "ConfigPortInterface::readRegister");
-    }
+        std::string l_str = "";
+        T l_result;
 
-    //!< Analyze answer
-    std::string::size_type firstIdx;
-    firstIdx = l_str.find_first_of(kUFXC_OK_REQUEST_STRING);
+        if (!m_socket)
+        {
+            throw ufxclib::Exception("INTERNAL_ERROR",
+                                      "Cannot access socket ptr!",
+                                      "ConfigPortInterface::read_register");
+        }
 
-    if (firstIdx == 0) //!< good answer
-    {
-      std::string l_str_l = "";
-      std::string l_str_r = "";
-      yat::StringUtil::split(l_str, '=', &l_str_l, &l_str_r);
-      l_str = l_str_r;
-    }
-    else
-    {
-      firstIdx = l_str.find_first_of(kUFXC_ERROR_STRING);
-      if (firstIdx == 0)
-      {
-        //!< error
-        std::string l_err_str = std::string("Cannot read register: ") + name + std::string(" Returned: ") + l_str;
-        throw ufxclib::Exception("READ_ERROR",
-                         l_err_str.c_str(),
-                         "ConfigPortInterface::readRegister");
-      }
-      else
-      {
-        //!< unknown answer !!
-        std::string l_err_str = std::string("Cannot read register: ") + name + std::string(" Unknown read error: ") + l_str;
-        throw ufxclib::Exception("UNKNOWN_READ_ERROR",
-                     l_err_str.c_str(),
-                     "ConfigPortInterface::readRegister");
-      }
-    }
+        try
+        {
+            /// write request on the underlying socket
+            std::string l_request = name + std::string("?\n");
+            m_socket->send(l_request);
 
-    l_result = yat::XString<T>::to_num(l_str);
-    return l_result;
-  }
+            /// wait then get data from peer
+            m_socket->wait_input_data(UFXC_BOX_WAIT);
+            m_socket->receive(l_str);
+        } 
+        catch (const yat::SocketException & se)
+        {
+            throw ufxclib::Exception("SOCKET_ERROR", 
+                                     se.text().c_str(),
+                                     "ConfigPortInterface::read_register");
+        }
+        catch (...)
+        {
+            throw ufxclib::Exception("UNKNOWN_ERROR",
+                                     "Cannot read register: unknown error!",
+                                     "ConfigPortInterface::read_register");
+        }
 
-  //!< Write register
-  //!< @param name Register name
-  //!< @param value Register value
-  template <class T>
-  void writeRegister(std::string name, T value)
-    throw (ufxclib::Exception)
-  {
-    yat::log_verbose("ufxclib", "ConfigPortInterface::writeRegister() entering...");
-    yat::log_verbose("ufxclib", " --> register name: %s", name.c_str());
+        /// Analyze answer
+        std::string::size_type firstIdx;
+        firstIdx = l_str.find_first_of(UFXC_OK_REQUEST_STRING);
 
-    std::string l_str = "";
-    if (!m_socket)
-        throw ufxclib::Exception("INTERNAL_ERROR",
-                     "Cannot access socket ptr!",
-                     "ConfigPortInterface::writeRegister");
+        if (firstIdx == 0) /// good answer
+        {
+            std::string l_str_l = "";
+            std::string l_str_r = "";
+            yat::StringUtil::split(l_str, '=', &l_str_l, &l_str_r);
+            l_str = l_str_r;
+        } 
+        else
+        {
+            firstIdx = l_str.find_first_of(UFXC_ERROR_STRING);
+            if (firstIdx == 0)
+            {
+                /// error
+                std::string l_err_str = "Cannot read register: " + name + " Returned: " + l_str;
+                throw ufxclib::Exception("READ_ERROR", 
+                                         l_err_str.c_str(),
+                                         "ConfigPortInterface::read_register");
+            } 
+            else
+            {
+                /// unknown answer !!
+                std::string l_err_str = "Cannot read register: " + name + " Unknown read error: " + l_str;
+                throw ufxclib::Exception("UNKNOWN_READ_ERROR",
+                                        l_err_str.c_str(),
+                                        "ConfigPortInterface::read_register");
+            }
+        }
 
-    try
-    {
-      //!< write request on the underlying socket
-      std::string l_request = name + std::string("=") + yat::XString<T>::to_string(value) + std::string("\n");
-      m_socket->send(l_request);
-
-      //!< wait then get data from peer
-      m_socket->wait_input_data(kUFXC_BOX_WAIT);
-      m_socket->receive(l_str);
-    }
-    catch (const yat::SocketException & se)
-    {
-      throw ufxclib::Exception("SOCKET_ERROR",
-        se.text().c_str(),
-        "ConfigPortInterface::writeRegister");
-    }
-    catch (...)
-    {
-      throw ufxclib::Exception("UNKNOWN_ERROR",
-        "Cannot write register: unknown error!",
-        "ConfigPortInterface::writeRegister");
+        l_result = yat::XString<T>::to_num(l_str);
+        return l_result;
     }
 
-    //!< Analyze answer
-    std::string::size_type firstIdx;
-    firstIdx = l_str.find_first_of(kUFXC_OK_CMD_STRING);
-    if (firstIdx == 0) //!< good answer
+    /**
+    * \fn specialized std::string read_register_s(std::string name)
+    * \brief read the register value
+    * \param name : Register name
+    * \return Register value (a string value)
+    */
+    //- TODO: use template specialization
+    std::string read_register_s(const std::string& name)
     {
-      //!<ok
-    }
-    else
-    {
-      firstIdx = l_str.find_first_of(kUFXC_ERROR_STRING);
-      if (firstIdx == 0)
-      {
-        //!< error
-        std::string l_err_str = std::string("Cannot write register: ") + name + std::string(" Returned: ") + l_str;
-        throw ufxclib::Exception("WRITE_ERROR",
-                         l_err_str.c_str(),
-                         "ConfigPortInterface::writeRegister");
-      }
-      else
-      {
-        // unknown answer !!
-        std::string l_err_str = std::string("Cannot write register: ") + name + std::string(" Unknown read error: ") + l_str;
-        throw ufxclib::Exception("UNKNOWN_WRITE_ERROR",
-                     l_err_str.c_str(),
-                     "ConfigPortInterface::writeRegister");
-      }
-    }
-  }
+        yat::log_verbose("UFXCLib", "ConfigPortInterface::read_register_s<string>() entering...");
+        yat::log_verbose("UFXCLib", " --> register name: %s", name.c_str());
 
-  //TODO: This function is not tested
-  //!< Read table
-  //!<  @param name Table
-  //!<  @return Table values
-  template <class T>
-  std::vector<T> readTable(std::string name)
-    throw (ufxclib::Exception)
-  {
-    std::string l_str="";
-    std::vector<T> l_res_list;
+        std::string l_str = "";
 
-    if (!m_socket)
-        throw ufxclib::Exception("INTERNAL_ERROR",
-                     "Cannot access socket ptr!",
-                     "ConfigPortInterface::readTable");
-    try
-    {
-      //!< write request on the underlying socket
-      std::string l_request = name + std::string("?\n");
-      m_socket->send(l_request);
+        if (!m_socket)
+        {
+            throw ufxclib::Exception("INTERNAL_ERROR",
+                                    "Cannot access socket ptr!",
+                                    "ConfigPortInterface::read_register_s");
+        }
 
-      //!< wait then get data from peer
-      m_socket->wait_input_data(kUFXC_BOX_WAIT);
-      m_socket->receive(l_str);
-    }
-    catch (const yat::SocketException & se)
-    {
-      throw ufxclib::Exception("SOCKET_ERROR",
-        se.text().c_str(),
-        "ConfigPortInterface::readTable");
-    }
-    catch (...)
-    {
-      throw ufxclib::Exception("UNKNOWN_ERROR",
-        "Cannot read table: unknown error!",
-        "ConfigPortInterface::readTable");
-    }
+        try
+        {
+            /// write request on the underlying socket
+            std::string l_request = name + std::string("?\n");
+            m_socket->send(l_request);
 
-    //!< Analyze answer
-    std::string::size_type firstIdx;
-    if (l_str[0] == '!') //!< good answer
-    {
-      std::vector<std::string> splited_line;
-      std::vector<std::string> str_res;
+            /// wait then get data from peer
+            m_socket->wait_input_data(UFXC_BOX_WAIT);
+            m_socket->receive(l_str);
+        }
+        catch (const yat::SocketException & se)
+        {
+            throw ufxclib::Exception("SOCKET_ERROR",
+                                    se.text().c_str(),
+                                    "ConfigPortInterface::read_register_s");
+        }
+        catch (...)
+        {
+            throw ufxclib::Exception("UNKNOWN_ERROR",
+                                    "Cannot read register: unknown error!",
+                                    "ConfigPortInterface::read_register_s");
+        }
 
-      //!< seperate lines (delete '\n')
-      yat::StringUtil::split(l_str, '\n', &splited_line);
+        /// Analyze answer
+        std::string::size_type firstIdx;
+        firstIdx = l_str.find_first_of(UFXC_OK_REQUEST_STRING);
 
-      // delete last line (should be a single '.')
-      splited_line.pop_back();
+        if (firstIdx == 0) /// good answer
+        {
+            std::string l_str_l = "";
+            std::string l_str_r = "";
+            yat::StringUtil::split(l_str, '=', &l_str_l, &l_str_r);
+            l_str = l_str_r;
+        }
+        else
+        {
+            firstIdx = l_str.find_first_of(UFXC_ERROR_STRING);
+            if (firstIdx == 0)
+            {
+                /// error
+                std::string l_err_str = "Cannot read register: " + name + " Returned: " + l_str;
+                throw ufxclib::Exception("READ_ERROR",
+                                         l_err_str.c_str(),
+                                         "ConfigPortInterface::read_register_s");
+            }
+            else
+            {
+                /// unknown answer !!
+                std::string l_err_str = "Cannot read register: " + name + " Unknown read error: " + l_str;
+                throw ufxclib::Exception("UNKNOWN_READ_ERROR",
+                                         l_err_str.c_str(),
+                                         "ConfigPortInterface::read_register_s");
+            }
+        }
 
-      //!< delete '!' at each beginning of line
-      for (size_t idx = 0; idx < splited_line.size(); idx++)
-        str_res.push_back(splited_line[idx].substr(1, std::string::npos));
-
-      //!< transform string to T type
-      for (size_t idx = 0; idx < str_res.size(); idx++)
-        l_res_list.push_back(yat::XString<T>::to_num(str_res[idx]));
-    }
-    else
-    {
-      firstIdx = l_str.find_first_of(kUFXC_ERROR_STRING);
-      if (firstIdx == 0)
-      {
-        //!< error
-        std::string l_err_str = std::string("Cannot read table: ") + name + std::string(" Returned: ") + l_str;
-        throw ufxclib::Exception("READ_ERROR",
-                l_err_str.c_str(),
-                "ConfigPortInterface::readTable");
-      }
-      else
-      {
-        //!< unknown answer !!
-        std::string l_err_str = std::string("Cannot read table: ") + name + std::string(" Unknown read error: ") + l_str;
-        throw ufxclib::Exception("UNKNOWN_READ_ERROR",
-                l_err_str.c_str(),
-                "ConfigPortInterface::readTable");
-      }
+        return l_str;
     }
 
-    return l_res_list;
-  }
-
-  //TODO: This function is not tested
-  //!< Write table
-  //!< @param name Table name
-  //!< @param values Table values
-  template <class T>
-  void writeTable(std::string name, std::vector<T>& values)
-    throw (ufxclib::Exception)
-  {
-    yat::log_verbose("ufxclib", "ConfigPortInterface::writeTable() entering...");
-    yat::log_verbose("ufxclib", " --> table name: %s", name.c_str());
-
-    std::string l_str = "";
-
-    if (!m_socket)
-        throw ufxclib::Exception("INTERNAL_ERROR",
-                     "Cannot access socket ptr!",
-                     "ConfigPortInterface::writeTable");
-
-    try
+    /**
+    * \fn template<class T> void write_register(std::string name, T value)
+    * \brief write value in the register
+    * \param name : Register name
+    * \param value : Register value
+	* \return void
+    */
+    template<typename T>
+    void write_register(std::string const& name, T value)
     {
-      //- write request on the underlying socket
-      std::string l_request = name + std::string("<\n");
-      for (size_t idx = 0; idx < values.size(); idx++)
-        l_request += yat::XString<T>::to_string(values[idx]) + std::string("\n");
+        yat::log_verbose("UFXCLib", "ConfigPortInterface::write_register() entering...");
+        yat::log_verbose("UFXCLib", " --> register name: %s", name.c_str());
 
-      l_request += std::string("\n");
+        std::string l_str = "";
+        
+        if (!m_socket)
+        {
+            throw ufxclib::Exception("INTERNAL_ERROR",
+                                     "Cannot access socket ptr!",
+                                     "ConfigPortInterface::read_register");
+        }
 
-      yat::log_verbose("ufxclib", " --> send command: %s", l_request.c_str());
+        try
+        {
+            /// write request on the underlying socket
+            std::string l_request = name + "=" + yat::XString<T>::to_string(value) + "\n";
+            m_socket->send(l_request);
 
-      m_socket->send(l_request);
+            /// wait then get data from peer
+            m_socket->wait_input_data(UFXC_BOX_WAIT);
+            m_socket->receive(l_str);
+        } 
+        catch (const yat::SocketException & se)
+        {
+            throw ufxclib::Exception("SOCKET_ERROR",
+                                     se.text().c_str(),
+                                     "ConfigPortInterface::write_register");
+        } 
+        catch (...)
+        {
+            throw ufxclib::Exception("UNKNOWN_ERROR",
+                                     "Cannot write register: unknown error!",
+                                     "ConfigPortInterface::write_register");
+        }
 
-      //- wait then get data from peer
-      m_socket->wait_input_data(kUFXC_BOX_WAIT);
-      m_socket->receive(l_str);
+        /// Analyze answer
+        std::string::size_type firstIdx;
+        firstIdx = l_str.find_first_of(UFXC_OK_CMD_STRING);
+        if (firstIdx != 0) /// error
+        {
+            firstIdx = l_str.find_first_of(UFXC_ERROR_STRING);
+            if (firstIdx == 0)
+            {
+                /// error
+                std::string l_err_str = "Cannot write register: " + name + " Returned: " + l_str;
+
+                throw ufxclib::Exception("WRITE_ERROR", 
+                                         l_err_str.c_str(),
+                                         "ConfigPortInterface::write_register");
+            } 
+            else
+            {
+                /// unknown answer !!
+                std::string l_err_str = "Cannot write register: " + name + " Unknown read error: " + l_str;
+
+                throw ufxclib::Exception("UNKNOWN_WRITE_ERROR",
+                                         l_err_str.c_str(),
+                                         "ConfigPortInterface::write_register");
+            }
+        }
     }
-    catch (const yat::SocketException & se)
-    {
-      throw ufxclib::Exception("SOCKET_ERROR",
-        se.text().c_str(),
-        "ConfigPortInterface::writeTable");
-    }
-    catch (...)
-    {
-      throw ufxclib::Exception("UNKNOWN_ERROR",
-        "Cannot write register: unknown error!",
-        "ConfigPortInterface::writeTable");
-    }
-
-    // Analyze answer
-    std::string::size_type firstIdx;
-    firstIdx = l_str.find_first_of(kUFXC_OK_CMD_STRING);
-    if (firstIdx == 0) // good answer
-    {
-      //ok
-    }
-    else
-    {
-      firstIdx = l_str.find_first_of(kUFXC_ERROR_STRING);
-      if (firstIdx == 0)
-      {
-        // error
-        std::string l_err_str = std::string("Cannot write table: ") + name + std::string(" Returned: ") + l_str;
-        throw ufxclib::Exception("READ_ERROR",
-                         l_err_str.c_str(),
-                         "ConfigPortInterface::writeTable");
-      }
-      else
-      {
-        // unknown answer !!
-        std::string l_err_str = std::string("Cannot write table: ") + name + std::string(" Unknown read error: ") + l_str;
-        throw ufxclib::Exception("UNKNOWN_READ_ERROR",
-                     l_err_str.c_str(),
-                     "ConfigPortInterface::writeTable");
-      }
-    }
-  }
-
-  //TODO: This function is not tested
-  //!< Get table length
-  //!< @param name Table name
-  //!< @return Table length
-  unsigned int getTableLength(std::string name)
-    throw (ufxclib::Exception);
-
-  //TODO: This function is not tested
-  //!< Get table max length
-  //!< @param name Table name
-  //!< @return Table max length
-  unsigned int getTableMaxLength(std::string name)
-    throw (ufxclib::Exception);
 
 private:
 
-  //!< Connection configuration
-  T_UfxcLibCnx m_cnxConfig;
+    /// Connection configuration
+    T_UfxcLibCnx m_cnx_config;
 
-  };
+};
 
-} //!< namespace ufxclib
+} /// namespace ufxclib
 
-#endif //!< CONFIGPORTINTERFACE_H_
+#endif /// UFXCLIB_CONFIGPORTINTERFACE_H_
 
