@@ -34,7 +34,7 @@
 #include "lima/Debug.h"
 #include "lima/MiscUtils.h"
 #include "UfxcCamera.h"
-
+#include <sys/time.h>
 using namespace lima;
 using namespace lima::Ufxc;
 using namespace std;
@@ -46,7 +46,7 @@ using namespace std;
 /************************************************************************
  * \brief constructor
  ************************************************************************/
-Camera::Camera(const std::string& config_ip_address, unsigned long config_port,
+Camera::Camera(const std::string& TCP_ip_address, unsigned long  TCP_port,
 			   const std::string& SFP1_ip_address, unsigned long SFP1_port,
 			   const std::string& SFP2_ip_address, unsigned long SFP2_port,
 			   const std::string& SFP3_ip_address, unsigned long SFP3_port,
@@ -59,30 +59,30 @@ Camera::Camera(const std::string& config_ip_address, unsigned long config_port,
 	m_detector_firmware_version = "undefined";
 	m_detector_software_version = "undefined";
 	m_module_firmware_version = "undefined";
-	m_depth = 16;
+	m_depth = 14;
 	m_acq_frame_nb = 0;
 	try
 	{
-		ufxclib::T_UfxcLibCnx tcpCnx, SFPpCnx1, SFPpCnx2, SFPpCnx3;
-		tcpCnx.ip_address = config_ip_address;
-		tcpCnx.configuration_port = config_port;
-		tcpCnx.socket_timeout_ms = timeout_ms;
-		tcpCnx.protocol = ufxclib::T_Protocol::TCP;
+		ufxclib::T_UfxcLibCnx TCP_cnx, SFP1_cnx, SFP2_cnx, SFP3_cnx;
+		TCP_cnx.ip_address = TCP_ip_address;
+		TCP_cnx.configuration_port = TCP_port;
+		TCP_cnx.socket_timeout_ms = timeout_ms;
+		TCP_cnx.protocol = ufxclib::T_Protocol::TCP;
 
-		SFPpCnx1.ip_address = SFP1_ip_address;
-		SFPpCnx1.configuration_port = SFP1_port;
-		SFPpCnx1.socket_timeout_ms = timeout_ms;
-		SFPpCnx1.protocol = ufxclib::T_Protocol::UDP;
+		SFP1_cnx.ip_address = SFP1_ip_address;
+		SFP1_cnx.configuration_port = SFP1_port;
+		SFP1_cnx.socket_timeout_ms = timeout_ms;
+		SFP1_cnx.protocol = ufxclib::T_Protocol::UDP;
 
-		SFPpCnx2.ip_address = SFP2_ip_address;
-		SFPpCnx2.configuration_port = SFP2_port;
-		SFPpCnx2.socket_timeout_ms = timeout_ms;
-		SFPpCnx2.protocol = ufxclib::T_Protocol::UDP;
+		SFP2_cnx.ip_address = SFP2_ip_address;
+		SFP2_cnx.configuration_port = SFP2_port;
+		SFP2_cnx.socket_timeout_ms = timeout_ms;
+		SFP2_cnx.protocol = ufxclib::T_Protocol::UDP;
 
-		SFPpCnx3.ip_address = SFP3_ip_address;
-		SFPpCnx3.configuration_port = SFP3_port;
-		SFPpCnx3.socket_timeout_ms = timeout_ms;
-		SFPpCnx3.protocol = ufxclib::T_Protocol::UDP;
+		SFP3_cnx.ip_address = SFP3_ip_address;
+		SFP3_cnx.configuration_port = SFP3_port;
+		SFP3_cnx.socket_timeout_ms = timeout_ms;
+		SFP3_cnx.protocol = ufxclib::T_Protocol::UDP;
 
 		//- prepare the registers
 		SetHardwareRegisters();
@@ -91,7 +91,7 @@ Camera::Camera(const std::string& config_ip_address, unsigned long config_port,
 		m_ufxc_interface = new ufxclib::UFXCInterface();
 
 		//- connect to the DAQ/Detector
-		m_ufxc_interface->open_connection(tcpCnx, SFPpCnx1, SFPpCnx2, SFPpCnx3);
+		m_ufxc_interface->open_connection(TCP_cnx, SFP1_cnx, SFP2_cnx, SFP3_cnx);
 
 		//- set the registers to the DAQ
 		m_ufxc_interface->get_config_acquisition_obj()->set_acquisition_registers_names(m_acquisition_registers);
@@ -99,21 +99,18 @@ Camera::Camera(const std::string& config_ip_address, unsigned long config_port,
 		m_ufxc_interface->get_daq_monitoring_obj()->set_monitoring_registers_names(m_monitor_registers);
 
 		//soft_reset() once when init device
-		////m_ufxc_interface->get_config_acquisition_obj()->soft_reset();
-		//fix the acquisition mode
-		m_ufxc_interface->get_config_acquisition_obj()->set_acq_mode(ufxclib::T_AcquisitionMode::software_raw);//pump_and_probe software_raw		
+		//m_ufxc_interface->get_config_acquisition_obj()->soft_reset();
+		//fix the acquisition mode (done in setTrigMode)
+		//m_ufxc_interface->get_config_acquisition_obj()->set_acq_mode(ufxclib::T_AcquisitionMode::software_raw);//pump_and_probe software_raw		
 	}
 	catch(const ufxclib::Exception& ue)
 	{
 		std::ostringstream err_msg;
 		err_msg << "Error in Camera::Camera() :"
-		 << "\nreason : "
-		 << ue.errors[0].reason
-		 << "\ndesc : "
-		 << ue.errors[0].desc
-		 << "\norigin : "
-		 << ue.errors[0].origin
-		 << std::endl;
+				<< "\nreason : " << ue.errors[0].reason
+				<< "\ndesc : "	 << ue.errors[0].desc
+				<< "\norigin : " << ue.errors[0].origin
+				<< std::endl;
 		DEB_ERROR() << err_msg;
 		THROW_HW_FATAL(ErrorType::Error) << err_msg.str();
 	}
@@ -190,7 +187,9 @@ void Camera::startAcq()
 	StdBufferCbMgr& buffer_mgr = m_bufferCtrlObj.getBuffer();
 	buffer_mgr.setStartTimestamp(Timestamp::now());
 	DEB_TRACE() << "Ensure that Acquisition is Started  ";
+	
 	setStatus(Camera::Busy, false);
+	
 	//@BEGIN : Ensure that Acquisition is Started before return ...
 	m_ufxc_interface->get_config_acquisition_obj()->start_acquisition();
 	//@END
@@ -217,7 +216,7 @@ void Camera::stopAcq()
 	}
 
 	//@BEGIN : Ensure that Acquisition is Stopped before return ...	
-	//...
+	m_ufxc_interface->get_config_acquisition_obj()->stop_acquisition();
 	//@END
 	//now detector is ready
 	setStatus(Camera::Ready, false);
@@ -229,7 +228,7 @@ void Camera::stopAcq()
 void Camera::getStatus(Camera::Status& status)
 {
 	DEB_MEMBER_FUNCT();
-
+	AutoMutex aLock(m_cond.mutex());
 	ufxclib::T_DetectorStatus det_status;
 
 	// getting the detector status
@@ -252,7 +251,7 @@ void Camera::getStatus(Camera::Status& status)
 			break;
 		case ufxclib::T_DetectorStatus::E_DET_NOT_CONFIGURED:
 			m_status = Camera::Ready;
-//			DEB_TRACE() << "E_DET_NOT_CONFIGURED";
+			//DEB_TRACE() << "E_DET_NOT_CONFIGURED";
 			break;			
 		case ufxclib::T_DetectorStatus::E_DET_ERROR:
 			m_status = Camera::Fault;
@@ -271,7 +270,7 @@ void Camera::getStatus(Camera::Status& status)
 void Camera::setStatus(Camera::Status status, bool force)
 {
 	DEB_MEMBER_FUNCT();
-	//AutoMutex aLock(m_cond.mutex());
+	//AutoMutex aLock(m_cond.mutex());	
 	if(force || m_status != Camera::Fault)
 		m_status = status;
 	//m_cond.broadcast();
@@ -288,21 +287,39 @@ void Camera::readFrame(void)
 	StdBufferCbMgr& buffer_mgr = m_bufferCtrlObj.getBuffer();
 	//@BEGIN : 
 	//get Acquisitions images
-	size_t IMAGE_DATA_SIZE = (m_ufxc_interface->get_data_receiver_obj()->get_frame_number_for_2_counters(ufxclib::T_AcquisitionMode::software_raw) / COUNTER_NUMBER) * PACKET_DATA_LENGTH;
-	//= 112*1024+6; 112 is the frames number in each image, 1024 is the data size of each image. 
-	//header = 6 is the header size for each image and already extracted by the lib
+	DEB_TRACE()<<"PACKET_DATA_LENGTH = "<<PACKET_DATA_LENGTH;
+	AutoMutex aLock(m_cond.mutex());
+	ufxclib::T_AcquisitionMode mode = m_ufxc_interface->get_config_acquisition_obj()->get_acq_mode();
+	size_t IMAGE_DATA_SIZE = (m_ufxc_interface->get_data_receiver_obj()->get_frame_number_for_2_counters(mode) / COUNTER_NUMBER) * PACKET_DATA_LENGTH;
+	aLock.unlock();
+	DEB_TRACE()<<"IMAGE_DATA_SIZE = "<<IMAGE_DATA_SIZE;
+	
+	//allocate memory
 	char ** imgBuffer;
 	imgBuffer = new char *[2 * m_nb_frames];
 	for(int i = 0;i < (2 * m_nb_frames);i++)
 		imgBuffer[i] = new char[IMAGE_DATA_SIZE];
-	DEB_TRACE()<<"nb. frames (requested) = "<<m_nb_frames;		
+	DEB_TRACE()<<"nb. frames (requested) = "<<m_nb_frames;	
+	
+	aLock.lock();	
 	size_t frames_number = 0;
-	m_ufxc_interface->get_data_receiver_obj()->get_all_images(imgBuffer, ufxclib::T_AcquisitionMode::software_raw, m_nb_frames, frames_number);
-	//!< calculate the received images number for two counters
-	size_t received_images_number = frames_number / m_ufxc_interface->get_data_receiver_obj()->get_frame_number_for_2_counters(ufxclib::T_AcquisitionMode::software_raw);
+	//get all images (two counters)
+	m_ufxc_interface->get_data_receiver_obj()->get_all_images(imgBuffer, mode, m_nb_frames, frames_number);	
+	//calculate the received images number for two counters
+	size_t received_images_number = frames_number / m_ufxc_interface->get_data_receiver_obj()->get_frame_number_for_2_counters(mode);
+	aLock.unlock();	
+	
 	DEB_TRACE()<<"nb. frames (received) = "<<received_images_number<<"\n";
+struct timeval start, end;			
+gettimeofday(&start, NULL);		
 	std::stringstream filename("");	
-	std::ofstream output_file;
+	std::ofstream output_file;	
+	//generate 1 file for all images
+	filename.str("");
+	filename<<"/home/informatique/ica/noureddine/DeviceServers/ufxc_data.dat";			
+	DEB_TRACE()<<"filename = "<<filename.str();
+	output_file.open(filename.str(), std::ios::out | std::ofstream::binary);		
+
 	for(int i = 0;i < (received_images_number * 2);i++)
 	{		
 		if(i % 2 == 0)
@@ -310,31 +327,36 @@ void Camera::readFrame(void)
 			//Prepare Lima Frame Ptr 
 			DEB_TRACE() << "Prepare  Lima Frame Ptr("<<i/2<<")";			
 			bptr = buffer_mgr.getFrameBufferPtr(i/2);	
-			//memset(bptr, 0, 512*256*2);
-			filename.str("");
-			filename<<"/home/informatique/ica/noureddine/DeviceServers/ufxc_data_"<<i/2<<".dat";			
-			DEB_TRACE()<<"filename = "<<filename.str();
-			output_file.open(filename.str(), std::ios::out | std::ofstream::binary);
 		}		
-		
+
 		for(int j = 0;j < IMAGE_DATA_SIZE;j++)
 		{
 			output_file << int((unsigned char) (imgBuffer[i][j])) << " ";
 		}
+	
 		//next line for the 2nd counter
 		output_file << std::endl;
 		
 		if(i % 2 == 1 )
 		{			
-			output_file.close();
+			
 			//Push the image buffer through Lima 
 			DEB_TRACE() << "Declare a Lima new Frame Ready (" << m_acq_frame_nb << ")\n";
 			HwFrameInfoType frame_info;
 			frame_info.acq_frame_nb = m_acq_frame_nb;
 			buffer_mgr.newFrameReady(frame_info);
 			m_acq_frame_nb++;
+			
 		}
 	}
+	
+	output_file.close();//generate 1 file for all images
+	
+gettimeofday(&end, NULL);
+long seconds  = end.tv_sec  - start.tv_sec;
+long useconds = end.tv_usec - start.tv_usec;
+long mtime = ((seconds) * 1000 + useconds/1000.0) + 0.5;
+DEB_TRACE()<<"elapsed time = "<<mtime<<" in (ms)";			
 
 	//@END	
 	m_status = Camera::Busy;
@@ -355,8 +377,7 @@ int Camera::getNbHwAcquiredFrames()
 void Camera::AcqThread::threadFunction()
 {
 	DEB_MEMBER_FUNCT();
-	//	AutoMutex aLock(m_cam.m_cond.mutex());
-
+	AutoMutex aLock(m_cam.m_cond.mutex());
 
 	while(!m_cam.m_quit)
 	{
@@ -364,7 +385,7 @@ void Camera::AcqThread::threadFunction()
 		{
 			DEB_TRACE() << "Wait for start acquisition";
 			m_cam.m_thread_running = false;
-			AutoMutex lock(m_cam.m_cond.mutex());
+			m_cam.m_cond.broadcast();
 			m_cam.m_cond.wait();
 		}
 
@@ -372,8 +393,8 @@ void Camera::AcqThread::threadFunction()
 			return;
 		DEB_TRACE() << "AcqThread Running";
 		m_cam.m_thread_running = true;
-
-		//auto t1 = Clock::now();
+        m_cam.m_cond.broadcast();
+        aLock.unlock();
 
 		bool continueFlag = true;
 		while(continueFlag && (!m_cam.m_nb_frames || m_cam.m_acq_frame_nb < m_cam.m_nb_frames))
@@ -387,18 +408,36 @@ void Camera::AcqThread::threadFunction()
 				continue;
 			}
 
-			Camera::Status status;
-			m_cam.getStatus(status);
-			while(status == Camera::Busy)
-			{
-				//refresh status
-				m_cam.getStatus(status);
-				usleep(10000);//wait 10ms
+			try
+			{			
+				Camera::Status status;
+				m_cam.getStatus(status);				
+				m_cam.m_cond.broadcast();
+				if(status == Camera::Busy)
+				{					
+					DEB_TRACE()<<"Camera Busy ...";
+					usleep(100000);
+					continue;
+				}
+
+				//Read Frame From API/Driver/Etc ... & Copy it into Lima Frame Ptr
+				DEB_TRACE() << "Read Frame From API/Driver/Etc ... & Copy it into Lima Frame Ptr";				
+				m_cam.readFrame();
 			}
-			
-			//Read Frame From API/Driver/Etc ... & Copy it into Lima Frame Ptr
-			DEB_TRACE() << "Read Frame From API/Driver/Etc ... & Copy it into Lima Frame Ptr";				
-			m_cam.readFrame();
+			catch(const ufxclib::Exception& ue)
+			{	
+				std::ostringstream err_msg;
+				err_msg << "Error in AcqThread::threadFunction() :"
+						<< "\nreason : " << ue.errors[0].reason
+						<< "\ndesc : "	 << ue.errors[0].desc
+						<< "\norigin : " << ue.errors[0].origin
+						<< std::endl;
+				DEB_ERROR() << err_msg;
+						//now detector is ready
+				m_cam.setStatus(Camera::Fault, false);
+				REPORT_EVENT(err_msg.str())
+				THROW_HW_ERROR(Error) << err_msg.str();      
+			}
 		}
 		//auto t2 = Clock::now();
 		//DEB_TRACE() << "Delta t2-t1: " << std::chrono::duration_cast < std::chrono::nanoseconds > (t2 - t1).count() << " nanoseconds";
@@ -410,10 +449,11 @@ void Camera::AcqThread::threadFunction()
 			DEB_TRACE() << " AcqThread: StopAcq";
 			m_cam.stopAcq();
 		}
-
+		
+		//now detector is ready
+		m_cam.setStatus(Camera::Ready, false);
 		DEB_TRACE() << " AcqThread::threadfunction() Setting thread running flag to false";
-		AutoMutex lock(m_cam.m_cond.mutex());
-		//		aLock.lock();
+		aLock.lock();
 		m_cam.m_thread_running = false;
 		m_cam.m_wait_flag = true;
 	}
@@ -438,9 +478,11 @@ m_cam(cam)
 Camera::AcqThread::~AcqThread()
 {
 	AutoMutex aLock(m_cam.m_cond.mutex());
+	m_cam.m_wait_flag = true;
 	m_cam.m_quit = true;
 	m_cam.m_cond.broadcast();
 	aLock.unlock();
+	join();
 }
 
 //-----------------------------------------------------
@@ -451,10 +493,12 @@ void Camera::getImageType(ImageType& type)
 	DEB_MEMBER_FUNCT();
 	switch(m_depth)
 	{
-		case 16: type = Bpp16;
+		case 14: type = Bpp14;
 			break;
+		case 2: type = Bpp2;
+			break;			
 		default:
-			THROW_HW_ERROR(Error) << "This pixel format of the camera is not managed, only 16 bits cameras are already managed!";
+			THROW_HW_ERROR(Error) << "This pixel format of the camera is not managed, only (2 & 14) bits cameras are already managed!";
 			break;
 	}
 	return;
@@ -469,13 +513,18 @@ void Camera::setImageType(ImageType type)
 	DEB_TRACE() << "Camera::setImageType - " << DEB_VAR1(type);
 	switch(type)
 	{
-		case Bpp16:
+		case Bpp14:
 		{
-			m_depth = 16;
+			m_depth = 14;
 		}
 			break;
+		case Bpp2:
+		{
+			m_depth = 2;
+		}
+			break;			
 		default:
-			THROW_HW_ERROR(Error) << "This pixel format of the camera is not managed, only 16 bits cameras are already managed!";
+			THROW_HW_ERROR(Error) << "This pixel format of the camera is not managed, only (2 & 14) bits cameras are already managed!";
 			break;
 	}
 }
@@ -508,6 +557,7 @@ void Camera::getDetectorModel(std::string& model)
 void Camera::getDetectorImageSize(Size& size)
 {
 	DEB_MEMBER_FUNCT();
+	AutoMutex aLock(m_cond.mutex());
 	//@BEGIN : Get Detector type from Driver/API	
 	unsigned width = m_ufxc_interface->get_config_acquisition_obj()->get_current_width();
 	unsigned height = m_ufxc_interface->get_config_acquisition_obj()->get_current_height();
@@ -538,6 +588,14 @@ HwBufferCtrlObj* Camera::getBufferCtrlObj()
 //-----------------------------------------------------
 //
 //-----------------------------------------------------
+HwEventCtrlObj* Camera::getEventCtrlObj()
+{
+	return &m_event_ctrl_obj;
+}
+
+//-----------------------------------------------------
+//
+//-----------------------------------------------------
 bool Camera::checkTrigMode(TrigMode mode)
 {
 	DEB_MEMBER_FUNCT();
@@ -546,13 +604,10 @@ bool Camera::checkTrigMode(TrigMode mode)
 	switch(mode)
 	{
 		case IntTrig:
-		case IntTrigMult:
 		case ExtTrigSingle:
 		case ExtTrigMult:
-		case ExtGate:
 			valid_mode = true;
 			break;
-		case ExtTrigReadout:
 		default:
 			valid_mode = false;
 			break;
@@ -568,21 +623,72 @@ void Camera::setTrigMode(TrigMode mode)
 	DEB_MEMBER_FUNCT();
 	DEB_TRACE() << "Camera::setTrigMode() " << DEB_VAR1(mode);
 	DEB_PARAM() << DEB_VAR1(mode);
-	switch(mode)
+	AutoMutex aLock(m_cond.mutex());
+	try
 	{
-		case IntTrig:
-		case IntTrigMult:
-			break;
-		case ExtTrigSingle:
-			break;
-		case ExtTrigMult:
-			break;
-		case ExtGate:
-			break;
-		default:
-			THROW_HW_ERROR(NotSupported) << DEB_VAR1(mode);
+		switch(mode)
+		{
+			case IntTrig:
+				//do not write to hardware (raise exception if try to write to hardware) , but implicitly values are :
+				//nbimages = nbFrames
+				//nbtrigs = 1
+				if(m_depth==2)
+				{
+					THROW_HW_ERROR(NotSupported) << DEB_VAR1(mode);
+				}
+				if(m_depth==14)
+				{
+					m_ufxc_interface->get_config_acquisition_obj()->set_acq_mode(ufxclib::T_AcquisitionMode::software_raw);
+				}
+				break;
+			case ExtTrigSingle:
+				//nbimages = nbFrames
+				//nbtrigs = 1
+				if(m_depth==2)
+				{
+					m_ufxc_interface->get_config_acquisition_obj()->set_acq_mode(ufxclib::T_AcquisitionMode::pump_and_probe_raw);
+				}
+				if(m_depth==14)
+				{
+					m_ufxc_interface->get_config_acquisition_obj()->set_acq_mode(ufxclib::T_AcquisitionMode::external_raw);
+				}
+
+				m_ufxc_interface->get_config_acquisition_obj()->set_images_number(m_nb_frames);
+				m_ufxc_interface->get_config_acquisition_obj()->set_triggers_number(1);			
+				break;
+			case ExtTrigMult:
+				//nbimages = 1
+				//nbtrigs = nbFames
+				if(m_depth==2)
+				{
+					m_ufxc_interface->get_config_acquisition_obj()->set_acq_mode(ufxclib::T_AcquisitionMode::pump_and_probe_raw);
+				}
+				if(m_depth==14)
+				{
+					m_ufxc_interface->get_config_acquisition_obj()->set_acq_mode(ufxclib::T_AcquisitionMode::external_raw);
+				}
+
+				m_ufxc_interface->get_config_acquisition_obj()->set_images_number(1);
+				m_ufxc_interface->get_config_acquisition_obj()->set_triggers_number(m_nb_frames);					
+				break;
+			case ExtGate:
+				break;
+			default:
+				THROW_HW_ERROR(NotSupported) << DEB_VAR1(mode);
+		}
+		m_trigger_mode = mode;
 	}
-	m_trigger_mode = mode;
+	catch(const ufxclib::Exception& ue)
+	{
+		std::ostringstream err_msg;
+		err_msg << "Error in Camera::setTrigMode() :"
+				<< "\nreason : " << ue.errors[0].reason
+				<< "\ndesc : "	 << ue.errors[0].desc
+				<< "\norigin : " << ue.errors[0].origin
+				<< std::endl;
+		DEB_ERROR() << err_msg;
+		THROW_HW_FATAL(ErrorType::Error) << err_msg.str();
+	}	
 }
 
 //-----------------------------------------------------
@@ -601,10 +707,25 @@ void Camera::getTrigMode(TrigMode& mode)
 void Camera::getExpTime(double& exp_time)
 {
 	DEB_MEMBER_FUNCT();
-	//UFXCLib use (ms), but lima use (second) as unit
-	exp_time = m_ufxc_interface->get_config_acquisition_obj()->get_counting_time_ms();
-	exp_time = exp_time / 1000;
-	m_exp_time = exp_time;
+	AutoMutex aLock(m_cond.mutex());
+	try
+	{
+		//UFXCLib use (ms), but lima use (second) as unit
+		exp_time = m_ufxc_interface->get_config_acquisition_obj()->get_counting_time_ms();
+		exp_time = exp_time / 1000;
+		m_exp_time = exp_time;
+	}
+	catch(const ufxclib::Exception& ue)
+	{
+		std::ostringstream err_msg;
+		err_msg << "Error in Camera::setTrigMode() :"
+				<< "\nreason : " << ue.errors[0].reason
+				<< "\ndesc : "	 << ue.errors[0].desc
+				<< "\norigin : " << ue.errors[0].origin
+				<< std::endl;
+		DEB_ERROR() << err_msg;
+		THROW_HW_FATAL(ErrorType::Error) << err_msg.str();
+	}		
 	DEB_RETURN() << DEB_VAR1(exp_time);
 }
 
@@ -615,11 +736,25 @@ void Camera::setExpTime(double exp_time)
 {
 	DEB_MEMBER_FUNCT();
 	DEB_TRACE() << "Camera::setExpTime() " << DEB_VAR1(exp_time);
-	//UFXCLib use (ms), but lima use (second) as unit
-	m_ufxc_interface->get_config_acquisition_obj()->set_counting_time_ms(exp_time * 1000);
-	m_exp_time = exp_time;
+	AutoMutex aLock(m_cond.mutex());
+	try
+	{
+		//UFXCLib use (ms), but lima use (second) as unit
+		m_ufxc_interface->get_config_acquisition_obj()->set_counting_time_ms(exp_time * 1000);
+		m_exp_time = exp_time;
+	}
+	catch(const ufxclib::Exception& ue)
+	{
+		std::ostringstream err_msg;
+		err_msg << "Error in Camera::setExpTime() :"
+				<< "\nreason : " << ue.errors[0].reason
+				<< "\ndesc : "	 << ue.errors[0].desc
+				<< "\norigin : " << ue.errors[0].origin
+				<< std::endl;
+		DEB_ERROR() << err_msg;
+		THROW_HW_FATAL(ErrorType::Error) << err_msg.str();
+	}		
 }
-
 
 //-----------------------------------------------------
 //
@@ -628,9 +763,24 @@ void Camera::setLatTime(double lat_time)
 {
 	DEB_MEMBER_FUNCT();
 	DEB_TRACE() << "Camera::setLatTime() " << DEB_VAR1(lat_time);
-	//UFXCLib use (ms), but lima use (second) as unit
-	m_ufxc_interface->get_config_acquisition_obj()->set_waiting_time_ms(lat_time * 1000);
-	m_lat_time = lat_time;
+	AutoMutex aLock(m_cond.mutex());
+	try
+	{
+		//UFXCLib use (ms), but lima use (second) as unit
+		m_ufxc_interface->get_config_acquisition_obj()->set_waiting_time_ms(lat_time * 1000);
+		m_lat_time = lat_time;
+	}
+	catch(const ufxclib::Exception& ue)
+	{
+		std::ostringstream err_msg;
+		err_msg << "Error in Camera::setLatTime() :"
+				<< "\nreason : " << ue.errors[0].reason
+				<< "\ndesc : "	 << ue.errors[0].desc
+				<< "\norigin : " << ue.errors[0].origin
+				<< std::endl;
+		DEB_ERROR() << err_msg;
+		THROW_HW_FATAL(ErrorType::Error) << err_msg.str();
+	}	
 }
 
 //-----------------------------------------------------
@@ -639,11 +789,26 @@ void Camera::setLatTime(double lat_time)
 void Camera::getLatTime(double& lat_time)
 {
 	DEB_MEMBER_FUNCT();
-	//UFXCLib use (ms), but lima use (second) as unit 
-	lat_time = m_ufxc_interface->get_config_acquisition_obj()->get_waiting_time_ms();
-	lat_time = lat_time / 1000;
-	m_lat_time = lat_time;
-	DEB_RETURN() << DEB_VAR1(lat_time);
+	AutoMutex aLock(m_cond.mutex());
+	try
+	{
+		//UFXCLib use (ms), but lima use (second) as unit 
+		lat_time = m_ufxc_interface->get_config_acquisition_obj()->get_waiting_time_ms();
+		lat_time = lat_time / 1000;
+		m_lat_time = lat_time;
+		DEB_RETURN() << DEB_VAR1(lat_time);
+	}
+	catch(const ufxclib::Exception& ue)
+	{
+		std::ostringstream err_msg;
+		err_msg << "Error in Camera::getLatTime() :"
+				<< "\nreason : " << ue.errors[0].reason
+				<< "\ndesc : "	 << ue.errors[0].desc
+				<< "\norigin : " << ue.errors[0].origin
+				<< std::endl;
+		DEB_ERROR() << err_msg;
+		THROW_HW_FATAL(ErrorType::Error) << err_msg.str();
+	}		
 }
 
 //-----------------------------------------------------
@@ -677,12 +842,27 @@ void Camera::setNbFrames(int nb_frames)
 {
 	DEB_MEMBER_FUNCT();
 	DEB_TRACE() << "Camera::setNbFrames() " << DEB_VAR1(nb_frames);
-	if(m_nb_frames < 0)
+	AutoMutex aLock(m_cond.mutex());
+	try
 	{
-		THROW_HW_ERROR(Error) << "Number of frames to acquire has not been set";
+		if(m_nb_frames < 0)
+		{
+			THROW_HW_ERROR(Error) << "Number of frames to acquire has not been set";
+		}
+		m_ufxc_interface->get_config_acquisition_obj()->set_images_number(nb_frames);
+		m_nb_frames = nb_frames;
 	}
-	m_ufxc_interface->get_config_acquisition_obj()->set_images_number(nb_frames);
-	m_nb_frames = nb_frames;
+	catch(const ufxclib::Exception& ue)
+	{
+		std::ostringstream err_msg;
+		err_msg << "Error in Camera::setNbFrames() :"
+				<< "\nreason : " << ue.errors[0].reason
+				<< "\ndesc : "	 << ue.errors[0].desc
+				<< "\norigin : " << ue.errors[0].origin
+				<< std::endl;
+		DEB_ERROR() << err_msg;
+		THROW_HW_FATAL(ErrorType::Error) << err_msg.str();
+	}		
 }
 
 //-----------------------------------------------------
@@ -691,19 +871,55 @@ void Camera::setNbFrames(int nb_frames)
 void Camera::getNbFrames(int& nb_frames)
 {
 	DEB_MEMBER_FUNCT();
-	DEB_TRACE() << "Camera::getNbFrames";
-	DEB_RETURN() << DEB_VAR1(m_nb_frames);
-	nb_frames = m_ufxc_interface->get_config_acquisition_obj()->get_images_number();
-	m_nb_frames = nb_frames;
+	AutoMutex aLock(m_cond.mutex());
+	try
+	{
+		nb_frames = m_ufxc_interface->get_config_acquisition_obj()->get_images_number();
+		m_nb_frames = nb_frames;
+	}
+	catch(const ufxclib::Exception& ue)
+	{
+		std::ostringstream err_msg;
+		err_msg << "Error in Camera::getNbFrames() :"
+				<< "\nreason : " << ue.errors[0].reason
+				<< "\ndesc : "	 << ue.errors[0].desc
+				<< "\norigin : " << ue.errors[0].origin
+				<< std::endl;
+		DEB_ERROR() << err_msg;
+		THROW_HW_FATAL(ErrorType::Error) << err_msg.str();
+	}		
 }
 
+//-----------------------------------------------------
+//
+//-----------------------------------------------------
+bool Camera::is_thread_running()
+{
+	return m_thread_running;
+}
 
 ///////////////////////////////////////////////////
 // Ufxc specific stuff now
 ///////////////////////////////////////////////////////
 void Camera::get_lib_version(std::string & version)
 {
-	version = m_ufxc_interface->get_UFXC_lib_version();
+	DEB_MEMBER_FUNCT();	
+	AutoMutex aLock(m_cond.mutex());
+	try
+	{
+		version = m_ufxc_interface->get_UFXC_lib_version();
+	}
+	catch(const ufxclib::Exception& ue)
+	{
+		std::ostringstream err_msg;
+		err_msg << "Error in Camera::get_lib_version() :"
+				<< "\nreason : " << ue.errors[0].reason
+				<< "\ndesc : "	 << ue.errors[0].desc
+				<< "\norigin : " << ue.errors[0].origin
+				<< std::endl;
+		DEB_ERROR() << err_msg;
+		THROW_HW_FATAL(ErrorType::Error) << err_msg.str();
+	}		
 }
 
 //-----------------------------------------------------
@@ -711,16 +927,266 @@ void Camera::get_lib_version(std::string & version)
 //-----------------------------------------------------
 void Camera::get_firmware_version(std::string & version)
 {
-	version = m_ufxc_interface->get_daq_monitoring_obj()->get_firmware_version();
+	DEB_MEMBER_FUNCT();
+	AutoMutex aLock(m_cond.mutex());
+	try
+	{
+		version = m_ufxc_interface->get_daq_monitoring_obj()->get_firmware_version();
+	}
+	catch(const ufxclib::Exception& ue)
+	{
+		std::ostringstream err_msg;
+		err_msg << "Error in Camera::get_firmware_version() :"
+				<< "\nreason : " << ue.errors[0].reason
+				<< "\ndesc : "	 << ue.errors[0].desc
+				<< "\norigin : " << ue.errors[0].origin
+				<< std::endl;
+		DEB_ERROR() << err_msg;
+		THROW_HW_FATAL(ErrorType::Error) << err_msg.str();
+	}		
 }
 
 //-----------------------------------------------------
 //
 //-----------------------------------------------------
-void Camera::get_detector_temperature(unsigned long temp)
+void Camera::get_detector_temperature(unsigned long& temp)
 {
-	temp = m_ufxc_interface->get_daq_monitoring_obj()->get_detector_temp();
+	DEB_MEMBER_FUNCT();
+	AutoMutex aLock(m_cond.mutex());
+	try
+	{
+		temp = m_ufxc_interface->get_daq_monitoring_obj()->get_detector_temp();
+	}
+	catch(const ufxclib::Exception& ue)
+	{
+		std::ostringstream err_msg;
+		err_msg << "Error in Camera::get_detector_temperature() :"
+				<< "\nreason : " << ue.errors[0].reason
+				<< "\ndesc : "	 << ue.errors[0].desc
+				<< "\norigin : " << ue.errors[0].origin
+				<< std::endl;
+		DEB_ERROR() << err_msg;
+		THROW_HW_FATAL(ErrorType::Error) << err_msg.str();
+	}		
 }
+
+//-----------------------------------------------------
+//
+//-----------------------------------------------------
+void Camera::set_threshold_Low1(unsigned long thr)
+{
+	DEB_MEMBER_FUNCT();
+	AutoMutex aLock(m_cond.mutex());
+	try
+	{
+		m_ufxc_interface->get_config_acquisition_obj()->set_low_1_threshold(thr);
+	}
+	catch(const ufxclib::Exception& ue)
+	{
+		std::ostringstream err_msg;
+		err_msg << "Error in Camera::set_threshold_Low1() :"
+				<< "\nreason : " << ue.errors[0].reason
+				<< "\ndesc : "	 << ue.errors[0].desc
+				<< "\norigin : " << ue.errors[0].origin
+				<< std::endl;
+		DEB_ERROR() << err_msg;
+		THROW_HW_FATAL(ErrorType::Error) << err_msg.str();
+	}	
+}
+
+//-----------------------------------------------------
+//
+//-----------------------------------------------------	
+void Camera::get_threshold_Low1(unsigned long& thr)
+{	
+	DEB_MEMBER_FUNCT();
+	AutoMutex aLock(m_cond.mutex());
+	try
+	{
+		thr = m_ufxc_interface->get_config_acquisition_obj()->get_low_1_threshold();
+	}
+	catch(const ufxclib::Exception& ue)
+	{
+		std::ostringstream err_msg;
+		err_msg << "Error in Camera::get_threshold_Low1() :"
+				<< "\nreason : " << ue.errors[0].reason
+				<< "\ndesc : "	 << ue.errors[0].desc
+				<< "\norigin : " << ue.errors[0].origin
+				<< std::endl;
+		DEB_ERROR() << err_msg;
+		THROW_HW_FATAL(ErrorType::Error) << err_msg.str();
+	}		
+}
+
+//-----------------------------------------------------
+//
+//-----------------------------------------------------
+void Camera::set_threshold_Low2(unsigned long thr)
+{
+	DEB_MEMBER_FUNCT();
+	AutoMutex aLock(m_cond.mutex());
+	try
+	{
+		m_ufxc_interface->get_config_acquisition_obj()->set_low_2_threshold(thr);
+	}
+	catch(const ufxclib::Exception& ue)
+	{
+		std::ostringstream err_msg;
+		err_msg << "Error in Camera::set_threshold_Low2() :"
+				<< "\nreason : " << ue.errors[0].reason
+				<< "\ndesc : "	 << ue.errors[0].desc
+				<< "\norigin : " << ue.errors[0].origin
+				<< std::endl;
+		DEB_ERROR() << err_msg;
+		THROW_HW_FATAL(ErrorType::Error) << err_msg.str();
+	}		
+}
+
+//-----------------------------------------------------
+//
+//-----------------------------------------------------	
+void Camera::get_threshold_Low2(unsigned long& thr)
+{
+	DEB_MEMBER_FUNCT();
+	AutoMutex aLock(m_cond.mutex());
+	try
+	{
+		thr = m_ufxc_interface->get_config_acquisition_obj()->get_low_2_threshold();
+	}
+	catch(const ufxclib::Exception& ue)
+	{
+		std::ostringstream err_msg;
+		err_msg << "Error in Camera::get_threshold_Low2() :"
+				<< "\nreason : " << ue.errors[0].reason
+				<< "\ndesc : "	 << ue.errors[0].desc
+				<< "\norigin : " << ue.errors[0].origin
+				<< std::endl;
+		DEB_ERROR() << err_msg;
+		THROW_HW_FATAL(ErrorType::Error) << err_msg.str();
+	}		
+}
+
+//-----------------------------------------------------
+//
+//-----------------------------------------------------
+void Camera::set_threshold_High1(unsigned long thr)
+{
+	DEB_MEMBER_FUNCT();
+	AutoMutex aLock(m_cond.mutex());
+	try
+	{
+		m_ufxc_interface->get_config_acquisition_obj()->set_high_1_threshold(thr);
+	}
+	catch(const ufxclib::Exception& ue)
+	{
+		std::ostringstream err_msg;
+		err_msg << "Error in Camera::set_threshold_High1() :"
+				<< "\nreason : " << ue.errors[0].reason
+				<< "\ndesc : "	 << ue.errors[0].desc
+				<< "\norigin : " << ue.errors[0].origin
+				<< std::endl;
+		DEB_ERROR() << err_msg;
+		THROW_HW_FATAL(ErrorType::Error) << err_msg.str();
+	}			
+}
+
+//-----------------------------------------------------
+//
+//-----------------------------------------------------	
+void Camera::get_threshold_High1(unsigned long& thr)
+{
+	DEB_MEMBER_FUNCT();
+	AutoMutex aLock(m_cond.mutex());
+	try
+	{
+		thr = m_ufxc_interface->get_config_acquisition_obj()->get_high_1_threshold();
+	}
+	catch(const ufxclib::Exception& ue)
+	{
+		std::ostringstream err_msg;
+		err_msg << "Error in Camera::get_threshold_High1() :"
+				<< "\nreason : " << ue.errors[0].reason
+				<< "\ndesc : "	 << ue.errors[0].desc
+				<< "\norigin : " << ue.errors[0].origin
+				<< std::endl;
+		DEB_ERROR() << err_msg;
+		THROW_HW_FATAL(ErrorType::Error) << err_msg.str();
+	}		
+}
+
+//-----------------------------------------------------
+//
+//-----------------------------------------------------
+void Camera::set_threshold_High2(unsigned long thr)
+{
+	DEB_MEMBER_FUNCT();
+	AutoMutex aLock(m_cond.mutex());
+	try
+	{
+		m_ufxc_interface->get_config_acquisition_obj()->set_high_2_threshold(thr);
+	}
+	catch(const ufxclib::Exception& ue)
+	{
+		std::ostringstream err_msg;
+		err_msg << "Error in Camera::set_threshold_High2() :"
+				<< "\nreason : " << ue.errors[0].reason
+				<< "\ndesc : "	 << ue.errors[0].desc
+				<< "\norigin : " << ue.errors[0].origin
+				<< std::endl;
+		DEB_ERROR() << err_msg;
+		THROW_HW_FATAL(ErrorType::Error) << err_msg.str();
+	}		
+}
+
+//-----------------------------------------------------
+//
+//-----------------------------------------------------	
+void Camera::set_detector_config_file(const std::string& file_name)
+{
+	DEB_MEMBER_FUNCT();
+	AutoMutex aLock(m_cond.mutex());
+	try
+	{
+		m_ufxc_interface->set_detector_config_file(file_name);
+	}
+	catch(const ufxclib::Exception& ue)
+	{
+		std::ostringstream err_msg;
+		err_msg << "Error in Camera::set_detector_config_file() :"
+				<< "\nreason : " << ue.errors[0].reason
+				<< "\ndesc : "	 << ue.errors[0].desc
+				<< "\norigin : " << ue.errors[0].origin
+				<< std::endl;
+		DEB_ERROR() << err_msg;
+		THROW_HW_FATAL(ErrorType::Error) << err_msg.str();
+	}	
+}
+
+//-----------------------------------------------------
+//
+//-----------------------------------------------------	
+void Camera::get_threshold_High2(unsigned long& thr)
+{
+	DEB_MEMBER_FUNCT();
+	AutoMutex aLock(m_cond.mutex());
+	try
+	{
+		thr = m_ufxc_interface->get_config_acquisition_obj()->get_high_2_threshold();
+	}
+	catch(const ufxclib::Exception& ue)
+	{
+		std::ostringstream err_msg;
+		err_msg << "Error in Camera::get_threshold_High2() :"
+				<< "\nreason : " << ue.errors[0].reason
+				<< "\ndesc : "	 << ue.errors[0].desc
+				<< "\norigin : " << ue.errors[0].origin
+				<< std::endl;
+		DEB_ERROR() << err_msg;
+		THROW_HW_FATAL(ErrorType::Error) << err_msg.str();
+	}		
+}
+	
+	
 /*******************************************************
  * \brief Set the Hardware registers in the DAQ system
  *******************************************************/

@@ -34,8 +34,16 @@
 #include "lima/HwMaxImageSizeCallback.h"
 #include "lima/HwBufferMgr.h"
 #include "lima/HwInterface.h"
+#include "lima/HwEventCtrlObj.h"
 #include "lima/Debug.h"
 #include "ufxc/UFXCInterface.h"
+
+
+#define REPORT_EVENT(desc) { \
+    Event *my_event = new Event(Hardware,Event::Info, Event::Camera, Event::Default,desc); \
+    m_cam.getEventCtrlObj()->reportEvent(my_event);  \					
+} \
+
 
 using namespace std;
 
@@ -71,7 +79,7 @@ public:
 
     //==================================================================
     // constructor
-    Camera( const std::string&  config_ip_address, unsigned long config_port, //- IP Address and port for the config
+    Camera( const std::string&  TCP_ip_address,  unsigned long TCP_port,  //- IP Address and port for the config
             const std::string&  SFP1_ip_address, unsigned long SFP1_port, //- IP Address and port for the SFP1
             const std::string&  SFP2_ip_address, unsigned long SFP2_port, //- IP Address and port for the SFP2
             const std::string&  SFP3_ip_address, unsigned long SFP3_port, //- IP Address and port for the SFP3
@@ -98,6 +106,7 @@ public:
 
     // -- Buffer control object
     HwBufferCtrlObj* getBufferCtrlObj();
+    HwEventCtrlObj*  getEventCtrlObj();
 
     //-- Synch control object
     void setTrigMode(TrigMode mode);
@@ -116,14 +125,23 @@ public:
     void setNbFrames(int nb_frames);
     void getNbFrames(int& nb_frames);
 
-
+    bool is_thread_running();
+    
     ///////////////////////////////
     // -- ufxc specific functions
     ///////////////////////////////
     void get_lib_version(std::string & version);
     void get_firmware_version(std::string & version);
-    void get_detector_temperature(unsigned long temp);
-
+    void get_detector_temperature(unsigned long& temp);
+    void set_threshold_Low1(unsigned long thr);
+    void get_threshold_Low1(unsigned long& thr);
+    void set_threshold_Low2(unsigned long thr);
+    void get_threshold_Low2(unsigned long& thr);
+    void set_threshold_High1(unsigned long thr);
+    void get_threshold_High1(unsigned long& thr);
+    void set_threshold_High2(unsigned long thr);
+    void get_threshold_High2(unsigned long& thr);
+    void set_detector_config_file(const std::string& file_name);    
 private:
 
     //get frame from API/Driver/etc ...

@@ -42,6 +42,9 @@ m_sync(cam)
 
 	HwBufferCtrlObj *buffer = cam.getBufferCtrlObj();
 	m_cap_list.push_back(HwCap(buffer));
+	
+	//event capability
+	m_cap_list.push_back(HwCap(m_cam.getEventCtrlObj()));		
 }
 
 //-----------------------------------------------------
@@ -126,13 +129,18 @@ void Interface::getStatus(StatusType& status)
 	switch(camera_status)
 	{
 		case Camera::Ready:
-			status.set(HwInterface::StatusType::Ready);
+			if(!m_cam.is_thread_running())
+				status.set(HwInterface::StatusType::Ready);
+			else
+				status.set(HwInterface::StatusType::Exposure);
 			break;
 		case Camera::Busy:
 			status.set(HwInterface::StatusType::Exposure);
 			break;
 		case Camera::Configuring:
 			status.set(HwInterface::StatusType::Config);
+//		  	status.det = DetExposure;
+//		  	status.acq = AcqConfig;			
 			break;
 		case Camera::Fault:
 			status.set(HwInterface::StatusType::Fault);

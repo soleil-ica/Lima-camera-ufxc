@@ -34,6 +34,7 @@
 #include "UfxcSyncCtrlObj.h"
 #include "lima/HwInterface.h"
 #include "lima/HwBufferMgr.h"
+#include "lima/HwEventCtrlObj.h"
 
 namespace lima
 {
