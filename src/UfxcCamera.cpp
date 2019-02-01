@@ -35,6 +35,7 @@
 #include "lima/MiscUtils.h"
 #include "UfxcCamera.h"
 #include <sys/time.h>
+#include <ctime>
 using namespace lima;
 using namespace lima::Ufxc;
 using namespace std;
@@ -296,9 +297,18 @@ void Camera::readFrame(void)
 	
 	//allocate memory
 	char ** imgBuffer;
-	imgBuffer = new char *[2 * m_nb_frames];
-	for(int i = 0;i < (2 * m_nb_frames);i++)
-		imgBuffer[i] = new char[IMAGE_DATA_SIZE];
+	try
+	{
+		imgBuffer = new char *[2 * m_nb_frames];
+		for(int i = 0;i < (2 * m_nb_frames);i++)
+			imgBuffer[i] = new char[IMAGE_DATA_SIZE];
+    } 
+	catch (const std::bad_alloc& e) 
+	{
+        DEB_ERROR() << "Allocation failed: " << e.what();
+		THROW_HW_ERROR(Error) << e.what();      
+    }		
+	
 	DEB_TRACE()<<"nb. frames (requested) = "<<m_nb_frames;	
 	
 	aLock.lock();	
@@ -310,14 +320,20 @@ void Camera::readFrame(void)
 	aLock.unlock();	
 	
 	DEB_TRACE()<<"nb. frames (received) = "<<received_images_number<<"\n";
-struct timeval start, end;			
-gettimeofday(&start, NULL);		
+	
+Timestamp t0_total = Timestamp::now();	
 	std::stringstream filename("");	
 	std::ofstream output_file;	
 	//generate 1 file for all images
-	filename.str("");
-	filename<<"/home/informatique/ica/noureddine/DeviceServers/ufxc_data.dat";			
-	DEB_TRACE()<<"filename = "<<filename.str();
+    time_t     now = time(0);
+    struct tm  tstruct;
+    char       buf[80];
+    tstruct = *localtime(&now);
+    strftime(buf, sizeof(buf), "%Y-%m-%d-%X", &tstruct);
+	
+	filename.str("");		
+	filename<<"/dev/shm/ufxc/ufxc-data-"<<buf<<".dat";
+	DEB_TRACE()<<"filename = "<<filename.str()<<"\n";
 	output_file.open(filename.str(), std::ios::out | std::ofstream::binary);		
 
 	for(int i = 0;i < (received_images_number * 2);i++)
@@ -340,23 +356,36 @@ gettimeofday(&start, NULL);
 		if(i % 2 == 1 )
 		{			
 			
+			Timestamp t0_newframeready = Timestamp::now();			
 			//Push the image buffer through Lima 
-			DEB_TRACE() << "Declare a Lima new Frame Ready (" << m_acq_frame_nb << ")\n";
+			DEB_TRACE() << "Declare a Lima new Frame Ready (" << m_acq_frame_nb << ")";
+			
 			HwFrameInfoType frame_info;
 			frame_info.acq_frame_nb = m_acq_frame_nb;
 			buffer_mgr.newFrameReady(frame_info);
 			m_acq_frame_nb++;
 			
+			Timestamp t1_newframeready = Timestamp::now();
+			double delta_time_newframeready = t1_newframeready - t0_newframeready;
+			DEB_TRACE() << "newFrameReady : elapsed time = " << (int) (delta_time_newframeready * 1000) << " (ms)\n";		
 		}
 	}
 	
 	output_file.close();//generate 1 file for all images
 	
-gettimeofday(&end, NULL);
-long seconds  = end.tv_sec  - start.tv_sec;
-long useconds = end.tv_usec - start.tv_usec;
-long mtime = ((seconds) * 1000 + useconds/1000.0) + 0.5;
-DEB_TRACE()<<"elapsed time = "<<mtime<<" in (ms)";			
+	//free deallocate double pointer
+	if(imgBuffer)
+	{
+		for(int i=0;i<(2*m_nb_frames);i++)
+		{
+			delete[] imgBuffer[i];
+		}
+		delete[] imgBuffer;
+	}
+	
+Timestamp t1_total = Timestamp::now();	
+double delta_time_total = t1_total - t0_total;
+DEB_TRACE()<<"elapsed time total after get_all_images() = "<<(int) (delta_time_total * 1000)<<" (ms)";
 
 	//@END	
 	m_status = Camera::Busy;
@@ -416,7 +445,7 @@ void Camera::AcqThread::threadFunction()
 				if(status == Camera::Busy)
 				{					
 					DEB_TRACE()<<"Camera Busy ...";
-					usleep(100000);
+					usleep(400);//UFXCGui use this amount of sleep !
 					continue;
 				}
 
