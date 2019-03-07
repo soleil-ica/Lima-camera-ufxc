@@ -62,6 +62,7 @@ Camera::Camera(const std::string& TCP_ip_address, unsigned long  TCP_port,
 	m_module_firmware_version = "undefined";
 	m_depth = 14;
 	m_acq_frame_nb = 0;
+	m_nb_frames = 1;
 	try
 	{
 		ufxclib::T_UfxcLibCnx TCP_cnx, SFP1_cnx, SFP2_cnx, SFP3_cnx;
