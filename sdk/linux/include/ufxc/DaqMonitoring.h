@@ -139,12 +139,12 @@ public:
     yat::uint32 get_2_front_voltage();
 
     /**
-    * \fn T_DetectorStatus get_detector_status()
+    * \fn EnumDetectorStatus get_detector_status()
     * \brief get detector status value.
     * \param none
 	* \return detector status
     */
-    T_DetectorStatus get_detector_status();
+    EnumDetectorStatus get_detector_status();
 
     /**
     * \fn yat::uint32 get_delay_comp()
@@ -179,12 +179,12 @@ public:
     void stop_delay_scan();
 
     /**
-    * \fn void set_monitoring_registers_names(std::map<T_MonitoringKey, std::string> map)
+    * \fn void set_monitoring_registers_names(std::map<EnumMonitoringKey, std::string> map)
     * \brief Set monitoring registers names
     * \param map : it is a map contain the list of registers names for the monitoring config
 	* \return void
     */
-    void set_monitoring_registers_names(std::map<T_MonitoringKey, std::string> map);
+    void set_monitoring_registers_names(std::map<EnumMonitoringKey, std::string> map);
 
     /**
     * \fn std::string get_firmware_version()
@@ -219,15 +219,15 @@ public:
     uint8_t get_pixel_config_status();
 
 private:
-    std::map<T_MonitoringKey, std::string> m_monitor_registers;
+    std::map<EnumMonitoringKey, std::string> m_monitor_registers;
     ConfigPortInterface * m_config_port_interface;
     /**
-    * \fn T_DetectorStatus convert_string_to_T_DetectorStatus(std::string status)
-    * \brief Convert string to T_DetectorStatus enum
+    * \fn EnumDetectorStatus convert_string_to_detector_status(std::string status)
+    * \brief Convert string to EnumDetectorStatus enum
     * \param status : string status
 	* \return status
     */
-    T_DetectorStatus convert_string_to_T_DetectorStatus(std::string status);
+    EnumDetectorStatus convert_string_to_detector_status(std::string status);
 
 };
 } /// namespace ufxclib

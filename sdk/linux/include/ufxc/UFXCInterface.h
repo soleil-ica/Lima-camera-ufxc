@@ -55,7 +55,7 @@ public:
     virtual ~UFXCInterface();
 
     /**
-    * \fn void open_connection(T_UfxcLibCnx tcpCnx, T_UfxcLibCnx SFPpCnx1, T_UfxcLibCnx SFPpCnx2, T_UfxcLibCnx SFPpCnx3)
+    * \fn void open_connection(T_DaqCnxConfig tcpCnx, T_DaqCnxConfig SFPpCnx1, T_DaqCnxConfig SFPpCnx2, T_DaqCnxConfig SFPpCnx3)
     * \brief open one TCP connection and tree UDP connection with DAQ
     * \param tcpCnx struct contain the tcp connection parameters (IP, Port, ...).
     * \param SFPpCnx1 struct contain the SFP1 connection parameters (IP, Port, ...).
@@ -63,7 +63,7 @@ public:
     * \param SFPpCnx3 struct contain the SFP3 connection parameters (IP, Port, ...).
 	* \return void
     */
-    void open_connection(T_UfxcLibCnx tcpCnx, T_UfxcLibCnx SFPpCnx1, T_UfxcLibCnx SFPpCnx2, T_UfxcLibCnx SFPpCnx3);
+    void open_connection(T_DaqCnxConfig tcpCnx, T_DaqCnxConfig SFPCnx1, T_DaqCnxConfig SFPCnx2, T_DaqCnxConfig SFPCnx3);
 
     /**
     * \fn void close_connection()
@@ -115,12 +115,12 @@ public:
     void set_detector_config_file(std::string file_path_and_name);
 
     /**
-     * \fn std::string get_UFXC_lib_version()
+     * \fn std::string get_lib_version()
      * \brief get the library version
      * \param file_path_and_name
  	* \return library version
      */
-    std::string get_UFXC_lib_version();
+    std::string get_lib_version();
 
 private:
     DaqMonitoring * m_daq_monitoring;

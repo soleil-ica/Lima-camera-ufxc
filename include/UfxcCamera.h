@@ -133,13 +133,13 @@ public:
     void get_lib_version(std::string & version);
     void get_firmware_version(std::string & version);
     void get_detector_temperature(unsigned long& temp);
-    void set_threshold_Low1(unsigned long thr);
+    void set_threshold_Low1(float thr);
     void get_threshold_Low1(unsigned long& thr);
-    void set_threshold_Low2(unsigned long thr);
+    void set_threshold_Low2(float thr);
     void get_threshold_Low2(unsigned long& thr);
-    void set_threshold_High1(unsigned long thr);
+    void set_threshold_High1(float thr);
     void get_threshold_High1(unsigned long& thr);
-    void set_threshold_High2(unsigned long thr);
+    void set_threshold_High2(float thr);
     void get_threshold_High2(unsigned long& thr);
     void set_detector_config_file(const std::string& file_name);    
 private:
@@ -171,9 +171,9 @@ private:
     // UFXC lib main object
     ufxclib::UFXCInterface* m_ufxc_interface;
     // Registers configuration
-    std::map<ufxclib::T_AcquisitionConfigKey, std::string> m_acquisition_registers;
-    std::map<ufxclib::T_DetectorConfigKey, std::string> m_detector_registers;
-    std::map<ufxclib::T_MonitoringKey, std::string> m_monitor_registers;
+    std::map<ufxclib::EnumAcquisitionConfigKey, std::string> m_acquisition_registers;
+    std::map<ufxclib::EnumDetectorConfigKey, std::string> m_detector_registers;
+    std::map<ufxclib::EnumMonitoringKey, std::string> m_monitor_registers;
 
     // detector type
     std::string m_detector_type;

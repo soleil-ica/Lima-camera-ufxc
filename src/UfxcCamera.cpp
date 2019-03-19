@@ -65,26 +65,26 @@ Camera::Camera(const std::string& TCP_ip_address, unsigned long  TCP_port,
 	m_nb_frames = 1;
 	try
 	{
-		ufxclib::T_UfxcLibCnx TCP_cnx, SFP1_cnx, SFP2_cnx, SFP3_cnx;
+		ufxclib::DaqCnxConfig TCP_cnx, SFP1_cnx, SFP2_cnx, SFP3_cnx;
 		TCP_cnx.ip_address = TCP_ip_address;
 		TCP_cnx.configuration_port = TCP_port;
 		TCP_cnx.socket_timeout_ms = timeout_ms;
-		TCP_cnx.protocol = ufxclib::T_Protocol::TCP;
+		TCP_cnx.protocol = ufxclib::EnumProtocol::TCP;
 
 		SFP1_cnx.ip_address = SFP1_ip_address;
 		SFP1_cnx.configuration_port = SFP1_port;
 		SFP1_cnx.socket_timeout_ms = timeout_ms;
-		SFP1_cnx.protocol = ufxclib::T_Protocol::UDP;
+		SFP1_cnx.protocol = ufxclib::EnumProtocol::UDP;
 
 		SFP2_cnx.ip_address = SFP2_ip_address;
 		SFP2_cnx.configuration_port = SFP2_port;
 		SFP2_cnx.socket_timeout_ms = timeout_ms;
-		SFP2_cnx.protocol = ufxclib::T_Protocol::UDP;
+		SFP2_cnx.protocol = ufxclib::EnumProtocol::UDP;
 
 		SFP3_cnx.ip_address = SFP3_ip_address;
 		SFP3_cnx.configuration_port = SFP3_port;
 		SFP3_cnx.socket_timeout_ms = timeout_ms;
-		SFP3_cnx.protocol = ufxclib::T_Protocol::UDP;
+		SFP3_cnx.protocol = ufxclib::EnumProtocol::UDP;
 
 		//- prepare the registers
 		SetHardwareRegisters();
@@ -99,11 +99,6 @@ Camera::Camera(const std::string& TCP_ip_address, unsigned long  TCP_port,
 		m_ufxc_interface->get_config_acquisition_obj()->set_acquisition_registers_names(m_acquisition_registers);
 		m_ufxc_interface->get_config_detector_obj()->set_detector_registers_names(m_detector_registers);
 		m_ufxc_interface->get_daq_monitoring_obj()->set_monitoring_registers_names(m_monitor_registers);
-
-		//soft_reset() once when init device
-		//m_ufxc_interface->get_config_acquisition_obj()->soft_reset();
-		//fix the acquisition mode (done in setTrigMode)
-		//m_ufxc_interface->get_config_acquisition_obj()->set_acq_mode(ufxclib::T_AcquisitionMode::software_raw);//pump_and_probe software_raw		
 	}
 	catch(const ufxclib::Exception& ue)
 	{
@@ -231,31 +226,31 @@ void Camera::getStatus(Camera::Status& status)
 {
 	DEB_MEMBER_FUNCT();
 	AutoMutex aLock(m_cond.mutex());
-	ufxclib::T_DetectorStatus det_status;
+	ufxclib::EnumDetectorStatus det_status;
 
 	// getting the detector status
 	det_status = m_ufxc_interface->get_daq_monitoring_obj()->get_detector_status();
 
 	switch(det_status)
 	{
-		case ufxclib::T_DetectorStatus::E_DET_READY:
+		case ufxclib::EnumDetectorStatus::E_DET_READY:
 			m_status = Camera::Ready;
 			//DEB_TRACE() << "E_DET_READY";
 			break;
-		case ufxclib::T_DetectorStatus::E_DET_BUSY:
+		case ufxclib::EnumDetectorStatus::E_DET_BUSY:
 			m_status = Camera::Busy;
 			//DEB_TRACE() << "E_DET_BUSY";
 			break;
-		case ufxclib::T_DetectorStatus::E_DET_DELAY_SCANNING:
-		case ufxclib::T_DetectorStatus::E_DET_CONFIGURING:
+		case ufxclib::EnumDetectorStatus::E_DET_DELAY_SCANNING:
+		case ufxclib::EnumDetectorStatus::E_DET_CONFIGURING:
 			m_status = Camera::Configuring;
 			//DEB_TRACE() << "E_DET_CONFIGURING";
 			break;
-		case ufxclib::T_DetectorStatus::E_DET_NOT_CONFIGURED:
+		case ufxclib::EnumDetectorStatus::E_DET_NOT_CONFIGURED:
 			m_status = Camera::Ready;
 			//DEB_TRACE() << "E_DET_NOT_CONFIGURED";
 			break;			
-		case ufxclib::T_DetectorStatus::E_DET_ERROR:
+		case ufxclib::EnumDetectorStatus::E_DET_ERROR:
 			m_status = Camera::Fault;
 			DEB_TRACE() << "E_DET_ERROR";
 			break;
@@ -291,7 +286,7 @@ void Camera::readFrame(void)
 	//get Acquisitions images
 	DEB_TRACE()<<"PACKET_DATA_LENGTH = "<<PACKET_DATA_LENGTH;
 	AutoMutex aLock(m_cond.mutex());
-	ufxclib::T_AcquisitionMode mode = m_ufxc_interface->get_config_acquisition_obj()->get_acq_mode();
+	ufxclib::EnumAcquisitionMode mode = m_ufxc_interface->get_config_acquisition_obj()->get_acq_mode();
 	size_t IMAGE_DATA_SIZE = (m_ufxc_interface->get_data_receiver_obj()->get_frame_number_for_2_counters(mode) / COUNTER_NUMBER) * PACKET_DATA_LENGTH;
 	aLock.unlock();
 	DEB_TRACE()<<"IMAGE_DATA_SIZE = "<<IMAGE_DATA_SIZE;
@@ -430,7 +425,7 @@ void Camera::AcqThread::threadFunction()
 		while(continueFlag && (!m_cam.m_nb_frames || m_cam.m_acq_frame_nb < m_cam.m_nb_frames))
 		{
 			// Check first if acq. has been stopped
-			DEB_TRACE() << "AcqThread : Check first if acq. has been stopped ";
+			//DEB_TRACE() << "AcqThread : Check first if acq. has been stopped ";
 			if(m_cam.m_wait_flag)
 			{
 				DEB_TRACE() << "AcqThread: has been stopped from user ";
@@ -445,7 +440,7 @@ void Camera::AcqThread::threadFunction()
 				m_cam.m_cond.broadcast();
 				if(status == Camera::Busy)
 				{					
-					DEB_TRACE()<<"Camera Busy ...";
+					//DEB_TRACE()<<"Camera Busy ...";
 					usleep(400);//UFXCGui use this amount of sleep !
 					continue;
 				}
@@ -668,7 +663,7 @@ void Camera::setTrigMode(TrigMode mode)
 				}
 				if(m_depth==14)
 				{
-					m_ufxc_interface->get_config_acquisition_obj()->set_acq_mode(ufxclib::T_AcquisitionMode::software_raw);
+					m_ufxc_interface->get_config_acquisition_obj()->set_acq_mode(ufxclib::EnumAcquisitionMode::software_raw);
 				}
 				break;
 			case ExtTrigSingle:
@@ -676,11 +671,11 @@ void Camera::setTrigMode(TrigMode mode)
 				//nbtrigs = 1
 				if(m_depth==2)
 				{
-					m_ufxc_interface->get_config_acquisition_obj()->set_acq_mode(ufxclib::T_AcquisitionMode::pump_and_probe_raw);
+					m_ufxc_interface->get_config_acquisition_obj()->set_acq_mode(ufxclib::EnumAcquisitionMode::pump_and_probe_raw);
 				}
 				if(m_depth==14)
 				{
-					m_ufxc_interface->get_config_acquisition_obj()->set_acq_mode(ufxclib::T_AcquisitionMode::external_raw);
+					m_ufxc_interface->get_config_acquisition_obj()->set_acq_mode(ufxclib::EnumAcquisitionMode::external_raw);
 				}
 
 				m_ufxc_interface->get_config_acquisition_obj()->set_images_number(m_nb_frames);
@@ -691,11 +686,11 @@ void Camera::setTrigMode(TrigMode mode)
 				//nbtrigs = nbFames
 				if(m_depth==2)
 				{
-					m_ufxc_interface->get_config_acquisition_obj()->set_acq_mode(ufxclib::T_AcquisitionMode::pump_and_probe_raw);
+					m_ufxc_interface->get_config_acquisition_obj()->set_acq_mode(ufxclib::EnumAcquisitionMode::pump_and_probe_raw);
 				}
 				if(m_depth==14)
 				{
-					m_ufxc_interface->get_config_acquisition_obj()->set_acq_mode(ufxclib::T_AcquisitionMode::external_raw);
+					m_ufxc_interface->get_config_acquisition_obj()->set_acq_mode(ufxclib::EnumAcquisitionMode::external_raw);
 				}
 
 				m_ufxc_interface->get_config_acquisition_obj()->set_images_number(1);
@@ -937,7 +932,7 @@ void Camera::get_lib_version(std::string & version)
 	AutoMutex aLock(m_cond.mutex());
 	try
 	{
-		version = m_ufxc_interface->get_UFXC_lib_version();
+		version = m_ufxc_interface->get_lib_version();
 	}
 	catch(const ufxclib::Exception& ue)
 	{
@@ -1003,7 +998,7 @@ void Camera::get_detector_temperature(unsigned long& temp)
 //-----------------------------------------------------
 //
 //-----------------------------------------------------
-void Camera::set_threshold_Low1(unsigned long thr)
+void Camera::set_threshold_Low1(float thr)
 {
 	DEB_MEMBER_FUNCT();
 	AutoMutex aLock(m_cond.mutex());
@@ -1051,7 +1046,7 @@ void Camera::get_threshold_Low1(unsigned long& thr)
 //-----------------------------------------------------
 //
 //-----------------------------------------------------
-void Camera::set_threshold_Low2(unsigned long thr)
+void Camera::set_threshold_Low2(float thr)
 {
 	DEB_MEMBER_FUNCT();
 	AutoMutex aLock(m_cond.mutex());
@@ -1099,7 +1094,7 @@ void Camera::get_threshold_Low2(unsigned long& thr)
 //-----------------------------------------------------
 //
 //-----------------------------------------------------
-void Camera::set_threshold_High1(unsigned long thr)
+void Camera::set_threshold_High1(float thr)
 {
 	DEB_MEMBER_FUNCT();
 	AutoMutex aLock(m_cond.mutex());
@@ -1147,7 +1142,7 @@ void Camera::get_threshold_High1(unsigned long& thr)
 //-----------------------------------------------------
 //
 //-----------------------------------------------------
-void Camera::set_threshold_High2(unsigned long thr)
+void Camera::set_threshold_High2(float thr)
 {
 	DEB_MEMBER_FUNCT();
 	AutoMutex aLock(m_cond.mutex());
@@ -1222,59 +1217,59 @@ void Camera::get_threshold_High2(unsigned long& thr)
  *******************************************************/
 void Camera::SetHardwareRegisters()
 {
-	m_acquisition_registers[ufxclib::T_AcquisitionConfigKey::DET_THRESHOLD_LOW_1] = "FMC.DET_THRESHOLD_LOW_1";
-	m_acquisition_registers[ufxclib::T_AcquisitionConfigKey::DET_THRESHOLD_LOW_2] = "FMC.DET_THRESHOLD_LOW_2";
-	m_acquisition_registers[ufxclib::T_AcquisitionConfigKey::DET_THRESHOLD_HIGH_1] = "FMC.DET_THRESHOLD_HIGH_1";
-	m_acquisition_registers[ufxclib::T_AcquisitionConfigKey::DET_THRESHOLD_HIGH_2] = "FMC.DET_THRESHOLD_HIGH_2";
-	m_acquisition_registers[ufxclib::T_AcquisitionConfigKey::ACQ_MODE] = "FMC.ACQ_MODE";
-	m_acquisition_registers[ufxclib::T_AcquisitionConfigKey::ACQ_COUNT_TIME] = "FMC.ACQ_COUNT_TIME";
-	m_acquisition_registers[ufxclib::T_AcquisitionConfigKey::ACQ_WAIT_TIME] = "FMC.ACQ_WAIT_TIME";
-	m_acquisition_registers[ufxclib::T_AcquisitionConfigKey::ACQ_NIMG] = "FMC.ACQ_NIMG";
-	m_acquisition_registers[ufxclib::T_AcquisitionConfigKey::ACQ_NTRIG] = "FMC.ACQ_NTRIG";
-	m_acquisition_registers[ufxclib::T_AcquisitionConfigKey::StartAcq] = "FMC.StartAcq";
-	m_acquisition_registers[ufxclib::T_AcquisitionConfigKey::AbortAcq] = "FMC.AbortAcq";
-	m_acquisition_registers[ufxclib::T_AcquisitionConfigKey::SFP_SOFT_RESET] = "SFP.SOFT_RESET";
-	m_acquisition_registers[ufxclib::T_AcquisitionConfigKey::FMC_SOFT_RESET] = "FMC.SOFT_RESET";
+	m_acquisition_registers[ufxclib::EnumAcquisitionConfigKey::DET_THRESHOLD_LOW_1] = "FMC.DET_THRESHOLD_LOW_1";
+	m_acquisition_registers[ufxclib::EnumAcquisitionConfigKey::DET_THRESHOLD_LOW_2] = "FMC.DET_THRESHOLD_LOW_2";
+	m_acquisition_registers[ufxclib::EnumAcquisitionConfigKey::DET_THRESHOLD_HIGH_1] = "FMC.DET_THRESHOLD_HIGH_1";
+	m_acquisition_registers[ufxclib::EnumAcquisitionConfigKey::DET_THRESHOLD_HIGH_2] = "FMC.DET_THRESHOLD_HIGH_2";
+	m_acquisition_registers[ufxclib::EnumAcquisitionConfigKey::ACQ_MODE] = "FMC.ACQ_MODE";
+	m_acquisition_registers[ufxclib::EnumAcquisitionConfigKey::ACQ_COUNT_TIME] = "FMC.ACQ_COUNT_TIME";
+	m_acquisition_registers[ufxclib::EnumAcquisitionConfigKey::ACQ_WAIT_TIME] = "FMC.ACQ_WAIT_TIME";
+	m_acquisition_registers[ufxclib::EnumAcquisitionConfigKey::ACQ_NIMG] = "FMC.ACQ_NIMG";
+	m_acquisition_registers[ufxclib::EnumAcquisitionConfigKey::ACQ_NTRIG] = "FMC.ACQ_NTRIG";
+	m_acquisition_registers[ufxclib::EnumAcquisitionConfigKey::START_ACQ] = "FMC.StartAcq";
+	m_acquisition_registers[ufxclib::EnumAcquisitionConfigKey::ABORT_ACQ] = "FMC.AbortAcq";
+	m_acquisition_registers[ufxclib::EnumAcquisitionConfigKey::SFP_SOFT_RESET] = "SFP.SOFT_RESET";
+	m_acquisition_registers[ufxclib::EnumAcquisitionConfigKey::FMC_SOFT_RESET] = "FMC.SOFT_RESET";
 
-	m_detector_registers[ufxclib::T_DetectorConfigKey::GLB_POL] = "FMC.GLB_POL";
-	m_detector_registers[ufxclib::T_DetectorConfigKey::GLB_FS] = "FMC.GLB_FS";
-	m_detector_registers[ufxclib::T_DetectorConfigKey::GLB_BCAS] = "FMC.GLB_BCAS";
-	m_detector_registers[ufxclib::T_DetectorConfigKey::GLB_BKRUM] = "FMC.GLB_BKRUM";
-	m_detector_registers[ufxclib::T_DetectorConfigKey::GLB_BTRIM] = "FMC.GLB_BTRIM";
-	m_detector_registers[ufxclib::T_DetectorConfigKey::GLB_BREF] = "FMC.GLB_BREF";
-	m_detector_registers[ufxclib::T_DetectorConfigKey::GLB_BSH] = "FMC.GLB_BSH";
-	m_detector_registers[ufxclib::T_DetectorConfigKey::GLB_BDIS] = "FMC.GLB_BDIS";
-	m_detector_registers[ufxclib::T_DetectorConfigKey::GLB_BGSH] = "FMC.GLB_BGSH";
-	m_detector_registers[ufxclib::T_DetectorConfigKey::GLB_BR] = "FMC.GLB_BR";
-	m_detector_registers[ufxclib::T_DetectorConfigKey::DetectorConfig] = "FMC.DetectorConfig";
-	m_detector_registers[ufxclib::T_DetectorConfigKey::PIXCONF_BITLINE_NBR] = "FMC.PIXCONF_BITLINE_NBR";
-	m_detector_registers[ufxclib::T_DetectorConfigKey::PIXCONF_COL_31_0_A] = "FMC.PIXCONF_COL_31_0_A";
-	m_detector_registers[ufxclib::T_DetectorConfigKey::PIXCONF_COL_63_32_A] = "FMC.PIXCONF_COL_63_32_A";
-	m_detector_registers[ufxclib::T_DetectorConfigKey::PIXCONF_COL_95_64_A] = "FMC.PIXCONF_COL_95_64_A";
-	m_detector_registers[ufxclib::T_DetectorConfigKey::PIXCONF_COL_127_96_A] = "FMC.PIXCONF_COL_127_96_A";
-	m_detector_registers[ufxclib::T_DetectorConfigKey::PIXCONF_COL_31_0_B] = "FMC.PIXCONF_COL_31_0_B";
-	m_detector_registers[ufxclib::T_DetectorConfigKey::PIXCONF_COL_63_32_B] = "FMC.PIXCONF_COL_63_32_B";
-	m_detector_registers[ufxclib::T_DetectorConfigKey::PIXCONF_COL_95_64_B] = "FMC.PIXCONF_COL_95_64_B";
-	m_detector_registers[ufxclib::T_DetectorConfigKey::PIXCONF_COL_127_96_B] = "FMC.PIXCONF_COL_127_96_B";
-	m_detector_registers[ufxclib::T_DetectorConfigKey::PixLineConfig] = "FMC.PixLineConfig";
+	m_detector_registers[ufxclib::EnumDetectorConfigKey::GLB_POL] = "FMC.GLB_POL";
+	m_detector_registers[ufxclib::EnumDetectorConfigKey::GLB_FS] = "FMC.GLB_FS";
+	m_detector_registers[ufxclib::EnumDetectorConfigKey::GLB_BCAS] = "FMC.GLB_BCAS";
+	m_detector_registers[ufxclib::EnumDetectorConfigKey::GLB_BKRUM] = "FMC.GLB_BKRUM";
+	m_detector_registers[ufxclib::EnumDetectorConfigKey::GLB_BTRIM] = "FMC.GLB_BTRIM";
+	m_detector_registers[ufxclib::EnumDetectorConfigKey::GLB_BREF] = "FMC.GLB_BREF";
+	m_detector_registers[ufxclib::EnumDetectorConfigKey::GLB_BSH] = "FMC.GLB_BSH";
+	m_detector_registers[ufxclib::EnumDetectorConfigKey::GLB_BDIS] = "FMC.GLB_BDIS";
+	m_detector_registers[ufxclib::EnumDetectorConfigKey::GLB_BGSH] = "FMC.GLB_BGSH";
+	m_detector_registers[ufxclib::EnumDetectorConfigKey::GLB_BR] = "FMC.GLB_BR";
+	m_detector_registers[ufxclib::EnumDetectorConfigKey::DETECTOR_CONFIG] = "FMC.DetectorConfig";
+	m_detector_registers[ufxclib::EnumDetectorConfigKey::PIXCONF_BITLINE_NBR] = "FMC.PIXCONF_BITLINE_NBR";
+	m_detector_registers[ufxclib::EnumDetectorConfigKey::PIXCONF_COL_31_0_A] = "FMC.PIXCONF_COL_31_0_A";
+	m_detector_registers[ufxclib::EnumDetectorConfigKey::PIXCONF_COL_63_32_A] = "FMC.PIXCONF_COL_63_32_A";
+	m_detector_registers[ufxclib::EnumDetectorConfigKey::PIXCONF_COL_95_64_A] = "FMC.PIXCONF_COL_95_64_A";
+	m_detector_registers[ufxclib::EnumDetectorConfigKey::PIXCONF_COL_127_96_A] = "FMC.PIXCONF_COL_127_96_A";
+	m_detector_registers[ufxclib::EnumDetectorConfigKey::PIXCONF_COL_31_0_B] = "FMC.PIXCONF_COL_31_0_B";
+	m_detector_registers[ufxclib::EnumDetectorConfigKey::PIXCONF_COL_63_32_B] = "FMC.PIXCONF_COL_63_32_B";
+	m_detector_registers[ufxclib::EnumDetectorConfigKey::PIXCONF_COL_95_64_B] = "FMC.PIXCONF_COL_95_64_B";
+	m_detector_registers[ufxclib::EnumDetectorConfigKey::PIXCONF_COL_127_96_B] = "FMC.PIXCONF_COL_127_96_B";
+	m_detector_registers[ufxclib::EnumDetectorConfigKey::PIXLINE_CONFIG] = "FMC.PixLineConfig";
 
 
-	m_monitor_registers[ufxclib::T_MonitoringKey::TEMP_DAQ_PICO] = "SLOW.TEMP_DAQ_PICO";
-	m_monitor_registers[ufxclib::T_MonitoringKey::TEMP_DAQ_SFP] = "SLOW.TEMP_DAQ_SFP";
-	m_monitor_registers[ufxclib::T_MonitoringKey::FW_DELAY] = "FMC.FW_DELAY";
-	m_monitor_registers[ufxclib::T_MonitoringKey::TEMP_DAQ_PSU] = "SLOW.TEMP_DAQ_PSU";
-	m_monitor_registers[ufxclib::T_MonitoringKey::TEMP_DET] = "SLOW.TEMP_DET";
-	m_monitor_registers[ufxclib::T_MonitoringKey::ALIM_DET_P_HV_CURRENT] = "SLOW.ALIM_DET_P_HV_CURRENT";
-	m_monitor_registers[ufxclib::T_MonitoringKey::ALIM_DET_P_HV_CHIP] = "SLOW.ALIM_DET_P_HV_CHIP";
-	m_monitor_registers[ufxclib::T_MonitoringKey::ALIM_DET_1V2_CORE] = "SLOW.ALIM_DET_1V2_CORE";
-	m_monitor_registers[ufxclib::T_MonitoringKey::ALIM_DET_0V8_VDDM] = "SLOW.ALIM_DET_0V8_VDDM";
-	m_monitor_registers[ufxclib::T_MonitoringKey::ALIM_DET_1V2_DISC_A] = "SLOW.ALIM_DET_1V2_DISC_A";
-	m_monitor_registers[ufxclib::T_MonitoringKey::ALIM_DET_1V2_DISC_B] = "SLOW.ALIM_DET_1V2_DISC_B";
-	m_monitor_registers[ufxclib::T_MonitoringKey::ALIM_DET_1V2_VDDA_A] = "SLOW.ALIM_DET_1V2_VDDA_A";
-	m_monitor_registers[ufxclib::T_MonitoringKey::ALIM_DET_1V2_VDDA_B] = "SLOW.ALIM_DET_1V2_VDDA_B";
-	m_monitor_registers[ufxclib::T_MonitoringKey::DETECTOR_STATUS] = "FMC.DETECTOR_STATUS";
-	m_monitor_registers[ufxclib::T_MonitoringKey::DELAY_SCAN] = "FMC.Delay_scan";
-	m_monitor_registers[ufxclib::T_MonitoringKey::Abortdelay] = "FMC.AbortAcq";
-	m_monitor_registers[ufxclib::T_MonitoringKey::FIRMWARE_VERSION] = "*IDN";
-	m_monitor_registers[ufxclib::T_MonitoringKey::EN_PIXCONF_SCANDELAY_SFP] = "FMC.EN_PIXCONF_SCANDELAY_SFP";
+	m_monitor_registers[ufxclib::EnumMonitoringKey::TEMP_DAQ_PICO] = "SLOW.TEMP_DAQ_PICO";
+	m_monitor_registers[ufxclib::EnumMonitoringKey::TEMP_DAQ_SFP] = "SLOW.TEMP_DAQ_SFP";
+	m_monitor_registers[ufxclib::EnumMonitoringKey::FW_DELAY] = "FMC.FW_DELAY";
+	m_monitor_registers[ufxclib::EnumMonitoringKey::TEMP_DAQ_PSU] = "SLOW.TEMP_DAQ_PSU";
+	m_monitor_registers[ufxclib::EnumMonitoringKey::TEMP_DET] = "SLOW.TEMP_DET";
+	m_monitor_registers[ufxclib::EnumMonitoringKey::ALIM_DET_P_HV_CURRENT] = "SLOW.ALIM_DET_P_HV_CURRENT";
+	m_monitor_registers[ufxclib::EnumMonitoringKey::ALIM_DET_P_HV_CHIP] = "SLOW.ALIM_DET_P_HV_CHIP";
+	m_monitor_registers[ufxclib::EnumMonitoringKey::ALIM_DET_1V2_CORE] = "SLOW.ALIM_DET_1V2_CORE";
+	m_monitor_registers[ufxclib::EnumMonitoringKey::ALIM_DET_0V8_VDDM] = "SLOW.ALIM_DET_0V8_VDDM";
+	m_monitor_registers[ufxclib::EnumMonitoringKey::ALIM_DET_1V2_DISC_A] = "SLOW.ALIM_DET_1V2_DISC_A";
+	m_monitor_registers[ufxclib::EnumMonitoringKey::ALIM_DET_1V2_DISC_B] = "SLOW.ALIM_DET_1V2_DISC_B";
+	m_monitor_registers[ufxclib::EnumMonitoringKey::ALIM_DET_1V2_VDDA_A] = "SLOW.ALIM_DET_1V2_VDDA_A";
+	m_monitor_registers[ufxclib::EnumMonitoringKey::ALIM_DET_1V2_VDDA_B] = "SLOW.ALIM_DET_1V2_VDDA_B";
+	m_monitor_registers[ufxclib::EnumMonitoringKey::DETECTOR_STATUS] = "FMC.DETECTOR_STATUS";
+	m_monitor_registers[ufxclib::EnumMonitoringKey::DELAY_SCAN] = "FMC.Delay_scan";
+	m_monitor_registers[ufxclib::EnumMonitoringKey::ABORT_DELAY] = "FMC.AbortAcq";
+	m_monitor_registers[ufxclib::EnumMonitoringKey::FIRMWARE_VERSION] = "*IDN";
+	m_monitor_registers[ufxclib::EnumMonitoringKey::EN_PIXCONF_SCANDELAY_SFP] = "FMC.EN_PIXCONF_SCANDELAY_SFP";
 }

@@ -35,7 +35,7 @@ namespace ufxclib
 #define PACKET_DATA_LENGTH          1024    /// 1030 - 6 (header size)
 #define PACKET_HEADER_SIZE          6
 #define COUNTER_NUMBER              2
-#define UFXC_LIB_VERSION            "1.0.0" /// the library version
+#define LIB_VERSION            		"1.0.1" /// the library version
 #define IMAGE_WIDTH                 256     /// current image width
 #define IMAGE_HEIGHT                256     /// current image height
 #define CONFIG_FRAMES_NUMBER        224
@@ -49,7 +49,7 @@ const std::string UFXC_OK_CMD_STRING               = "OK";
 const std::string UFXC_ERROR_STRING                = "ERR";
 
 /**
- * \enum T_MonitoringKey
+ * \enum EnumMonitoringKey
  * \brief Monitoring keys functions
  */
 typedef enum
@@ -69,14 +69,14 @@ typedef enum
     ALIM_DET_P_HV_CHIP,
     ALIM_DET_P_HV_CURRENT,
     TEMP_DET,
-    Abortdelay,
+    ABORT_DELAY,
 	FIRMWARE_VERSION,
 	EN_PIXCONF_SCANDELAY_SFP
 
-} T_MonitoringKey;
+} EnumMonitoringKey;
 
 /**
- * \enum T_DetectorConfigKey
+ * \enum EnumDetectorConfigKey
  * \brief Detector keys functions
  */
 typedef enum
@@ -91,7 +91,7 @@ typedef enum
     GLB_BDIS, /// Discriminatory current
     GLB_BGSH, /// : shaper feedback control in case DET_GLB_FS=0
     GLB_BR, /// reference level DAC
-    DetectorConfig, /// apply_detector_config
+    DETECTOR_CONFIG, /// apply_detector_config
     PIXCONF_BITLINE_NBR,
     PIXCONF_COL_31_0_A,
     PIXCONF_COL_63_32_A,
@@ -101,12 +101,12 @@ typedef enum
     PIXCONF_COL_63_32_B,
     PIXCONF_COL_95_64_B,
     PIXCONF_COL_127_96_B,
-    PixLineConfig
+    PIXLINE_CONFIG
 
-} T_DetectorConfigKey;
+} EnumDetectorConfigKey;
 
 /**
- * \enum T_AcquisitionConfigKey
+ * \enum EnumAcquisitionConfigKey
  * \brief Acquisition keys functions
  */
 typedef enum
@@ -120,35 +120,35 @@ typedef enum
     ACQ_WAIT_TIME,          /// Time to wait after counting process in ms
     ACQ_NIMG,               /// Number of images to acquire after each trigger
     ACQ_NTRIG,              /// Number of external triggers during an acquisition.
-    StartAcq,               /// Start Acquisition
-    AbortAcq,               /// Stop Acquisition
+    START_ACQ,               /// Start Acquisition
+    ABORT_ACQ,               /// Stop Acquisition
     SFP_SOFT_RESET,         /// Reset SFPs in case of error
     FMC_SOFT_RESET          /// Reset data fifo, image frame count, FMC.DETECTOR_STATUS=E_DET_NOT_CONFIGURED
 
-} T_AcquisitionConfigKey;
+} EnumAcquisitionConfigKey;
 
 /**
- * \enum T_SFPconfigKey
+ * \enum EnumSFPconfigKey
  * \brief SFPs keys functions
  */
 typedef enum
 {
-    SFP_OUR_IP_AD_BYTE1,    /// SFP source IP address Byte 1 (byte integer value).
-    SFP_OUR_IP_AD_BYTE2,    /// SFP source IP address Byte 2 (byte integer value).
-    SFP_OUR_IP_AD_BYTE3,    /// SFP source IP address Byte 3 (byte integer value).
-    SFP_OUR_IP_AD_BYTE4,    /// SFP source IP address Byte 4 (byte integer value).
-    SFP_OUR_UDP_PORT,       /// SFP source UDP Port (16bit integer value).
-    SFP_DEST_IP_AD_BYTE1,   /// SFP destination IP address Byte 1 (byte integer value).
-    SFP_DEST_IP_AD_BYTE2,   /// SFP destination IP address Byte 2 (byte integer value).
-    SFP_DEST_IP_AD_BYTE3,   /// SFP destination IP address Byte 3 (byte integer value).
-    SFP_DEST_IP_AD_BYTE4,   /// SFP destination IP address Byte 4 (byte integer value).
+    SFP_LOCAL_IP_ADDR_BYTE1,    /// SFP source IP address Byte 1 (byte integer value).
+    SFP_LOCAL_IP_ADDR_BYTE2,    /// SFP source IP address Byte 2 (byte integer value).
+    SFP_LOCAL_IP_ADDR_BYTE3,    /// SFP source IP address Byte 3 (byte integer value).
+    SFP_LOCAL_IP_ADDR_BYTE4,    /// SFP source IP address Byte 4 (byte integer value).
+    SFP_LOCAL_UDP_PORT,       /// SFP source UDP Port (16bit integer value).
+    SFP_DEST_IP_ADDR_BYTE1,   /// SFP destination IP address Byte 1 (byte integer value).
+    SFP_DEST_IP_ADDR_BYTE2,   /// SFP destination IP address Byte 2 (byte integer value).
+    SFP_DEST_IP_ADDR_BYTE3,   /// SFP destination IP address Byte 3 (byte integer value).
+    SFP_DEST_IP_ADDR_BYTE4,   /// SFP destination IP address Byte 4 (byte integer value).
     SFP_DEST_UDP_PORT,      /// SFP destination UDP Port (16bit integer value).
     SFP_COUNT_UDPTX_ERR     /// SFP UDP TX error count (example no SFP cable plugged causing internal Fifo to overload).
 
-} T_SFPconfigKey;
+} EnumSFPconfigKey;
 
 /**
- * \enum T_SFPName
+ * \enum EnumSFPName
  * \brief SFPs names
  */
 typedef enum
@@ -157,10 +157,10 @@ typedef enum
 	SFP2,
 	SFP3
 
-} T_SFPName;
+} EnumSFPName;
 
 /**
- * \enum T_AcquisitionMode
+ * \enum EnumAcquisitionMode
  * \brief Acquisition Mode
  */
 typedef enum
@@ -172,10 +172,10 @@ typedef enum
     external_raw,       /// 256 x 256 pixels 2 counters per pixel 14 bits per counter Pixel (no pixel rearrangement).
     pump_and_probe_raw  /// 256 x 256 pixels 2 counters per pixel 2  bits per counter Pixel (no pixel rearrangement).
 
-} T_AcquisitionMode;
+} EnumAcquisitionMode;
 
 /**
- * \enum T_Protocol
+ * \enum EnumProtocol
  * \brief Protocol type
  */
 typedef enum
@@ -183,13 +183,13 @@ typedef enum
     UDP,
 	TCP
 
-} T_Protocol;
+} EnumProtocol;
 
 /**
- * \enum T_DetectorStatus
+ * \enum EnumDetectorStatus
  * \brief detector status value
  */
-typedef enum T_DetectorStatus
+typedef enum EnumDetectorStatus
 {
     E_DET_READY = 0,        /// detector ready for acquisition
     E_DET_BUSY,             /// acquisition in progress
@@ -198,13 +198,13 @@ typedef enum T_DetectorStatus
     E_DET_CONFIGURING,      /// Detector configuration in progress
     E_DET_NOT_CONFIGURED    /// detector not yet configured
 
-} T_DetectorStatus;
+} EnumDetectorStatus;
 
 /**
- * \struct T_UfxcLibCnx
+ * \struct T_DaqCnxConfig
  * \brief struct collects the parameters needed to connect to the DAQ
  */
-typedef struct T_UfxcLibCnx
+typedef struct T_DaqCnxConfig
 {
     /// ip address
     std::string ip_address;
@@ -216,26 +216,26 @@ typedef struct T_UfxcLibCnx
     unsigned long socket_timeout_ms;
 
     /// Protocol type
-    T_Protocol protocol;
+    EnumProtocol protocol;
 
     /// Constructor 
-    T_UfxcLibCnx() : ip_address("localhost"), configuration_port(8888), socket_timeout_ms(3000), protocol(TCP)
+    T_DaqCnxConfig() : ip_address("localhost"), configuration_port(8888), socket_timeout_ms(3000), protocol(TCP)
     {
     }
 
     /// destructor
-    ~T_UfxcLibCnx()
+    ~T_DaqCnxConfig()
     {
     }
 
     //- copy constructor
-    T_UfxcLibCnx(const T_UfxcLibCnx& src)
+    T_DaqCnxConfig(const T_DaqCnxConfig& src)
     {
         *this = src;
     }
 
     /// operator= 
-    const T_UfxcLibCnx & operator=(const T_UfxcLibCnx& src)
+    const T_DaqCnxConfig & operator=(const T_DaqCnxConfig& src)
     {
         if (this == &src)
         {
@@ -253,19 +253,19 @@ typedef struct T_UfxcLibCnx
     /// dump
     void dump() const
     {
-        std::cout   << "T_UfxcLibCnx::ip_address........." << ip_address
+        std::cout   << "T_DaqCnxConfig::ip_address........." << ip_address
                     << std::endl;
 
-        std::cout   << "T_UfxcLibCnx::configuration_port........."
+        std::cout   << "T_DaqCnxConfig::configuration_port........."
                     << configuration_port << std::endl;
 
-        std::cout   << "T_UfxcLibCnx::socket_timeout_ms........."
+        std::cout   << "T_DaqCnxConfig::socket_timeout_ms........."
                     << socket_timeout_ms << std::endl;
 
-        std::cout   << "T_UfxcLibCnx::protocol........." << protocol << std::endl;
+        std::cout   << "T_DaqCnxConfig::protocol........." << protocol << std::endl;
     }
 
-} T_UfxcLibCnx;
+} T_DaqCnxConfig;
 
 /**
  * \struct T_UDPConfig
@@ -280,10 +280,10 @@ typedef struct T_UDPConfig
     unsigned long long mac_address;
 
     /// IP destination address
-    std::string ip_des_address;
+    std::string ip_dest_address;
 
     /// UDP destination port
-    yat::uint32 udp_des_port;
+    yat::uint32 udp_dest_port;
 
     /// SFP internal IP address
     std::string ip_our_address;
@@ -292,7 +292,7 @@ typedef struct T_UDPConfig
     yat::uint32 udp_our_port;
 
     /// default constructor 
-    T_UDPConfig() : mac_address(12345), ip_des_address("localhost"), udp_des_port(8888), ip_our_address("localhost"), udp_our_port(8888), sfp(1)
+    T_UDPConfig() : mac_address(12345), ip_dest_address("localhost"), udp_dest_port(8888), ip_our_address("localhost"), udp_our_port(8888), sfp(1)
     {
     }
 
@@ -315,8 +315,8 @@ typedef struct T_UDPConfig
             return *this;
         }
         mac_address = src.mac_address;
-        ip_des_address = src.ip_des_address;
-        udp_des_port = src.udp_des_port;
+        ip_dest_address = src.ip_dest_address;
+        udp_dest_port = src.udp_dest_port;
         ip_our_address = src.ip_our_address;
         udp_our_port = src.udp_our_port;
         sfp = src.sfp;
@@ -330,10 +330,10 @@ typedef struct T_UDPConfig
         std::cout   << "T_UDPConfig::mac_address........." << mac_address
                     << std::endl;
 
-        std::cout   << "T_UDPConfig::ip_des_address........." << ip_des_address
+        std::cout   << "T_UDPConfig::ip_dest_address........." << ip_dest_address
                     << std::endl;
 
-        std::cout   << "T_UDPConfig::udp_des_port........." << udp_des_port
+        std::cout   << "T_UDPConfig::udp_dest_port........." << udp_dest_port
                     << std::endl;
 
         std::cout   << "T_UDPConfig::ip_our_address........." << ip_our_address

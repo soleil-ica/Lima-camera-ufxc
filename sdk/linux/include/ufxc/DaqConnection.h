@@ -49,14 +49,14 @@ public:
     virtual ~DaqConnection();
 
     /**
-    * \fn void connect(std::string ip_address, yat::uint32 port, T_Protocol protocol = TCP)
+    * \fn void connect(std::string ip_address, yat::uint32 port, EnumProtocol protocol = TCP)
     * \brief This function is used to connect to the DAQ. We can use the UDP or the TCP protocole to connect to the DAQ.
     * \param ip_address: UDP or TCP ip. It is the first parameter to connect to the DAQ.
     * \param port: UDP or TCP port. It is the second parameter to connect to the DAQ.
     * \param protocol: UDP or TCP
 	* \return void
     */
-    void connect(std::string ip_address, yat::uint32 port, T_Protocol protocol = TCP);
+    void connect(std::string ip_address, yat::uint32 port, EnumProtocol protocol = TCP);
 
     /**
     * \fn void disconnect()

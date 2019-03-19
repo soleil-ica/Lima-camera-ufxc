@@ -26,7 +26,7 @@ typedef enum
 {
     WARN, ERR, PANIC
 
-} Severity;
+} EnumSeverity;
 
 /**
  * \class Error
@@ -51,7 +51,7 @@ public:
     Error();
 
     /**
-    * \fn Error(const char *_reason, const char *_desc, const char *_origin, int _code = -1, ufxclib::Severity _severity = ufxclib::ERR)
+    * \fn Error(const char *_reason, const char *_desc, const char *_origin, int _code = -1, ufxclib::EnumSeverity _severity = ufxclib::ERR)
     * \brief Constructor with parameters.
     * \param _reason
     * * \param _desc
@@ -60,10 +60,10 @@ public:
     * * \param _severity
 	* \return none
     */
-    Error(const char *_reason, const char *_desc, const char *_origin, int _code = -1, ufxclib::Severity _severity = ufxclib::ERR);
+    Error(const char *_reason, const char *_desc, const char *_origin, int _code = -1, ufxclib::EnumSeverity _severity = ufxclib::ERR);
 
     /**
-    * \fn Error(const std::string& _reason, const std::string& _desc, const std::string& _origin, int _code = -1, ufxclib::Severity _severity = ufxclib::ERR)
+    * \fn Error(const std::string& _reason, const std::string& _desc, const std::string& _origin, int _code = -1, ufxclib::EnumSeverity _severity = ufxclib::ERR)
     * \brief Constructor with parameters.
     * \param _reason
     * * \param _desc
@@ -72,7 +72,7 @@ public:
     * * \param _severity
 	* \return none
     */
-    Error(const std::string& _reason, const std::string& _desc, const std::string& _origin, int _code = -1, ufxclib::Severity _severity = ufxclib::ERR);
+    Error(const std::string& _reason, const std::string& _desc, const std::string& _origin, int _code = -1, ufxclib::EnumSeverity _severity = ufxclib::ERR);
 
     /**
     * \fn Error(const Error& _src)
@@ -111,7 +111,7 @@ public:
     int code;
 
     /// Error details: severity
-    ufxclib::Severity severity;
+    ufxclib::EnumSeverity severity;
 };
 
 /**
@@ -139,7 +139,7 @@ public:
 
     // Constructor with parameters.
     /**
-    * \fn Exception(const char *_reason, const char *_desc, const char *_origin, int _code = -1, ufxclib::Severity _severity = ufxclib::ERR)
+    * \fn Exception(const char *_reason, const char *_desc, const char *_origin, int _code = -1, ufxclib::EnumSeverity _severity = ufxclib::ERR)
     * \brief Constructor with parameters.
     * \param _reason
     * * \param _desc
@@ -148,10 +148,10 @@ public:
     * * \param _severity
 	* \return none
     */
-    Exception(const char *_reason, const char *_desc, const char *_origin, int _code = -1, ufxclib::Severity _severity = ufxclib::ERR);
+    Exception(const char *_reason, const char *_desc, const char *_origin, int _code = -1, ufxclib::EnumSeverity _severity = ufxclib::ERR);
 
     /**
-    * \fn Exception(const std::string& _reason, const std::string& _desc, const std::string& _origin, int _code = -1, ufxclib::Severity _severity = ufxclib::ERR)
+    * \fn Exception(const std::string& _reason, const std::string& _desc, const std::string& _origin, int _code = -1, ufxclib::EnumSeverity _severity = ufxclib::ERR)
     * \brief Constructor with parameters.
     * \param _reason
     * * \param _desc
@@ -160,7 +160,7 @@ public:
     * * \param _severity
 	* \return none
     */
-    Exception(const std::string& _reason, const std::string& _desc, const std::string& _origin, int _code = -1, ufxclib::Severity _severity = ufxclib::ERR);
+    Exception(const std::string& _reason, const std::string& _desc, const std::string& _origin, int _code = -1, ufxclib::EnumSeverity _severity = ufxclib::ERR);
 
     //
     /**
@@ -196,7 +196,7 @@ public:
     virtual ~Exception();
 
     /**
-    * \fn void push_error(const char *_reason, const char *_desc, const char *_origin, int _code = -1, ufxclib::Severity _severity = ufxclib::ERR)
+    * \fn void push_error(const char *_reason, const char *_desc, const char *_origin, int _code = -1, ufxclib::EnumSeverity _severity = ufxclib::ERR)
     * \brief Pushes the specified error into the errors list.
     * \param _reason
     * \param _desc
@@ -205,10 +205,10 @@ public:
     * \param _severity
 	* \return void
     */
-    void push_error(const char *_reason, const char *_desc, const char *_origin, int _code = -1, ufxclib::Severity _severity = ufxclib::ERR);
+    void push_error(const char *_reason, const char *_desc, const char *_origin, int _code = -1, ufxclib::EnumSeverity _severity = ufxclib::ERR);
 
     /**
-    * \fn void push_error(const std::string& _reason, const std::string& _desc, const std::string& _origin, int _code = -1, ufxclib::Severity _severity = ufxclib::ERR)
+    * \fn void push_error(const std::string& _reason, const std::string& _desc, const std::string& _origin, int _code = -1, ufxclib::EnumSeverity _severity = ufxclib::ERR)
     * \brief Pushes the specified error into the errors list.
     * \param _reason
     * \param _desc
@@ -217,7 +217,7 @@ public:
     * \param _severity
 	* \return void
     */
-    void push_error(const std::string& _reason, const std::string& _desc, const std::string& _origin, int _code = -1, ufxclib::Severity _severity = ufxclib::ERR);
+    void push_error(const std::string& _reason, const std::string& _desc, const std::string& _origin, int _code = -1, ufxclib::EnumSeverity _severity = ufxclib::ERR);
 
     /**
     * \fn void push_error(const Error& _error)

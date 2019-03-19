@@ -44,12 +44,12 @@ public:
     virtual ~ConfigDetector();
 
     /**
-    * \fn void set_detector_registers_names(std::map<T_DetectorConfigKey, std::string> map)
+    * \fn void set_detector_registers_names(std::map<EnumDetectorConfigKey, std::string> map)
     * \brief Set detector registers names
     * \param map : it is a map contain the list of registers names for the detector config
 	* \return void
     */
-    void set_detector_registers_names(std::map<T_DetectorConfigKey, std::string> map);
+    void set_detector_registers_names(std::map<EnumDetectorConfigKey, std::string> map);
 
     /**
     * \fn bool get_CSA_polarity()
@@ -234,7 +234,7 @@ public:
     void set_pixel_config(std::vector<std::vector<std::uint32_t>> pixels);
 
 private:
-    std::map<T_DetectorConfigKey, std::string> m_detector_registers;
+    std::map<EnumDetectorConfigKey, std::string> m_detector_registers;
     ConfigPortInterface * m_config_port_interface;
 };
 } /// namespace ufxclib

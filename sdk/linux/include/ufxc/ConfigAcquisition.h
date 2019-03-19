@@ -46,12 +46,12 @@ public:
     virtual ~ConfigAcquisition();
 
     /**
-    * \fn void set_acquisition_registers_names(std::map<T_AcquisitionConfigKey, std::string> map)
+    * \fn void set_acquisition_registers_names(std::map<EnumAcquisitionConfigKey, std::string> map)
     * \brief Set Acquisition registers names
     * \param map : it is a map contain the list of registers names for the acquisition config
 	* \return void
     */
-    void set_acquisition_registers_names(std::map<T_AcquisitionConfigKey, std::string> map);
+    void set_acquisition_registers_names(std::map<EnumAcquisitionConfigKey, std::string> map);
 
     /**
     * \fn yat::uint32 get_low_1_threshold()
@@ -118,20 +118,20 @@ public:
     void set_high_2_threshold(yat::uint32 threshold_high);
 
     /**
-    * \fn T_AcquisitionMode get_acq_mode()
+    * \fn EnumAcquisitionMode get_acq_mode()
     * \brief get the acquisition mode. It is a value from 0 to 5
     * \param none
 	* \return the acquisition mode. It is a value from 0 to 5
     */
-    T_AcquisitionMode get_acq_mode();
+    EnumAcquisitionMode get_acq_mode();
 
     /**
-    * \fn void set_acq_mode(T_AcquisitionMode mode)
+    * \fn void set_acq_mode(EnumAcquisitionMode mode)
     * \brief set the acquisition mode.
     * \param mode : It is a value from 0 to 5
 	* \return void
     */
-    void set_acq_mode(T_AcquisitionMode mode);
+    void set_acq_mode(EnumAcquisitionMode mode);
 
     /**
     * \fn double get_counting_time_ms()
@@ -333,7 +333,7 @@ public:
 	std::size_t get_current_height();
 
 private:
-    std::map<T_AcquisitionConfigKey, std::string> m_acquisition_registers;
+    std::map<EnumAcquisitionConfigKey, std::string> m_acquisition_registers;
     CaptureManager * m_capture_manager_acqui;
     ConfigPortInterface * m_config_port_interface;
     /// The parameters of the linear function (value = f(energy)).
