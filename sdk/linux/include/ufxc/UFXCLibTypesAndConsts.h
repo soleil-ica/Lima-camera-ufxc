@@ -201,10 +201,10 @@ typedef enum EnumDetectorStatus
 } EnumDetectorStatus;
 
 /**
- * \struct T_DaqCnxConfig
+ * \struct DaqCnxConfig
  * \brief struct collects the parameters needed to connect to the DAQ
  */
-typedef struct T_DaqCnxConfig
+typedef struct DaqCnxConfig
 {
     /// ip address
     std::string ip_address;
@@ -219,23 +219,23 @@ typedef struct T_DaqCnxConfig
     EnumProtocol protocol;
 
     /// Constructor 
-    T_DaqCnxConfig() : ip_address("localhost"), configuration_port(8888), socket_timeout_ms(3000), protocol(TCP)
+    DaqCnxConfig() : ip_address("localhost"), configuration_port(8888), socket_timeout_ms(3000), protocol(TCP)
     {
     }
 
     /// destructor
-    ~T_DaqCnxConfig()
+    ~DaqCnxConfig()
     {
     }
 
     //- copy constructor
-    T_DaqCnxConfig(const T_DaqCnxConfig& src)
+    DaqCnxConfig(const DaqCnxConfig& src)
     {
         *this = src;
     }
 
     /// operator= 
-    const T_DaqCnxConfig & operator=(const T_DaqCnxConfig& src)
+    const DaqCnxConfig & operator=(const DaqCnxConfig& src)
     {
         if (this == &src)
         {
@@ -253,25 +253,25 @@ typedef struct T_DaqCnxConfig
     /// dump
     void dump() const
     {
-        std::cout   << "T_DaqCnxConfig::ip_address........." << ip_address
+        std::cout   << "DaqCnxConfig::ip_address........." << ip_address
                     << std::endl;
 
-        std::cout   << "T_DaqCnxConfig::configuration_port........."
+        std::cout   << "DaqCnxConfig::configuration_port........."
                     << configuration_port << std::endl;
 
-        std::cout   << "T_DaqCnxConfig::socket_timeout_ms........."
+        std::cout   << "DaqCnxConfig::socket_timeout_ms........."
                     << socket_timeout_ms << std::endl;
 
-        std::cout   << "T_DaqCnxConfig::protocol........." << protocol << std::endl;
+        std::cout   << "DaqCnxConfig::protocol........." << protocol << std::endl;
     }
 
-} T_DaqCnxConfig;
+} DaqCnxConfig;
 
 /**
- * \struct T_UDPConfig
+ * \struct UDPConfig
  * \brief struct collects the UDP config for each SFP
  */
-typedef struct T_UDPConfig
+typedef struct UDPConfig
 {
     /// output number, from 1 to 3
     unsigned short sfp;
@@ -286,29 +286,29 @@ typedef struct T_UDPConfig
     yat::uint32 udp_dest_port;
 
     /// SFP internal IP address
-    std::string ip_our_address;
+    std::string ip_local_address;
 
     /// SFP internal port
-    yat::uint32 udp_our_port;
+    yat::uint32 udp_local_port;
 
     /// default constructor 
-    T_UDPConfig() : mac_address(12345), ip_dest_address("localhost"), udp_dest_port(8888), ip_our_address("localhost"), udp_our_port(8888), sfp(1)
+    UDPConfig() : mac_address(12345), ip_dest_address("localhost"), udp_dest_port(8888), ip_local_address("localhost"), udp_local_port(8888), sfp(1)
     {
     }
 
     /// destructor 
-    ~T_UDPConfig()
+    ~UDPConfig()
     {
     }
 
     //- copy constructor 
-    T_UDPConfig(const T_UDPConfig& src)
+    UDPConfig(const UDPConfig& src)
     {
         *this = src;
     }
 
     /// operator= 
-    const T_UDPConfig & operator=(const T_UDPConfig& src)
+    const UDPConfig & operator=(const UDPConfig& src)
     {
         if (this == &src)
         {
@@ -317,8 +317,8 @@ typedef struct T_UDPConfig
         mac_address = src.mac_address;
         ip_dest_address = src.ip_dest_address;
         udp_dest_port = src.udp_dest_port;
-        ip_our_address = src.ip_our_address;
-        udp_our_port = src.udp_our_port;
+        ip_local_address = src.ip_local_address;
+        udp_local_port = src.udp_local_port;
         sfp = src.sfp;
 
         return *this;
@@ -327,25 +327,25 @@ typedef struct T_UDPConfig
     /// dump 
     void dump() const
     {
-        std::cout   << "T_UDPConfig::mac_address........." << mac_address
+        std::cout   << "UDPConfig::mac_address........." << mac_address
                     << std::endl;
 
-        std::cout   << "T_UDPConfig::ip_dest_address........." << ip_dest_address
+        std::cout   << "UDPConfig::ip_dest_address........." << ip_dest_address
                     << std::endl;
 
-        std::cout   << "T_UDPConfig::udp_dest_port........." << udp_dest_port
+        std::cout   << "UDPConfig::udp_dest_port........." << udp_dest_port
                     << std::endl;
 
-        std::cout   << "T_UDPConfig::ip_our_address........." << ip_our_address
+        std::cout   << "UDPConfig::ip_local_address........." << ip_local_address
                     << std::endl;
 
-        std::cout   << "T_UDPConfig::udp_our_port........." << udp_our_port
+        std::cout   << "UDPConfig::udp_local_port........." << udp_local_port
                     << std::endl;
 
-        std::cout   << "T_UDPConfig::sfp........." << sfp << std::endl;
+        std::cout   << "UDPConfig::sfp........." << sfp << std::endl;
     }
 
-} T_UDPConfig;
+} UDPConfig;
 
 } /// namespace ufxclib
 

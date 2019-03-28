@@ -67,7 +67,7 @@ public:
     * \param threshold_low : Low threshold
 	* \return void
     */
-    void set_low_1_threshold(yat::uint32 threshold_low);
+    void set_low_1_threshold(float threshold_low);
 
     /**
     * \fn yat::uint32 get_low_2_threshold()
@@ -83,7 +83,7 @@ public:
     * \param threshold_low : Low threshold
 	* \return void
     */
-    void set_low_2_threshold(yat::uint32 threshold_low);
+    void set_low_2_threshold(float threshold_low);
 
     /**
     * \fn yat::uint32 get_high_1_threshold()
@@ -99,7 +99,7 @@ public:
     * \param threshold_low : High threshold
 	* \return void
     */
-    void set_high_1_threshold(yat::uint32 threshold_high);
+    void set_high_1_threshold(float threshold_high);
 
     /**
     * \fn yat::uint32 get_high_2_threshold()
@@ -115,7 +115,7 @@ public:
     * \param threshold_low : High threshold
 	* \return void
     */
-    void set_high_2_threshold(yat::uint32 threshold_high);
+    void set_high_2_threshold(float threshold_high);
 
     /**
     * \fn EnumAcquisitionMode get_acq_mode()

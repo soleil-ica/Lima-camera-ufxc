@@ -43,12 +43,12 @@ public:
     virtual ~ConfigPortInterface();
 
     /**
-    * \fn void open(T_DaqCnxConfig cnx)
+    * \fn void open(DaqCnxConfig cnx)
     * \brief Open DAQ connection(s). This connection is used for all set/get DAQ registers values.
     * \param cnx : structure contains the connection parameters.
 	* \return void
     */
-    void open(T_DaqCnxConfig cnx);
+    void open(DaqCnxConfig cnx);
 
     /**
     * \fn void close()
@@ -293,7 +293,7 @@ public:
 private:
 
     /// Connection configuration
-    T_DaqCnxConfig m_cnx_config;
+    DaqCnxConfig m_cnx_config;
 
 };
 

@@ -74,21 +74,21 @@ public:
     void set_SFP_registers_names(std::map<EnumSFPconfigKey, std::string> map, EnumSFPName sfp_name);
 
     /**
-    * \fn T_UDPConfig get_SFP_network_config(EnumSFPName sfp_name)
+    * \fn UDPConfig get_SFP_network_config(EnumSFPName sfp_name)
     * \brief Get network configuration for specified SFP output
     * \param sfp_name : it is the SFPs ports name (EnumSFPName::SFP1, EnumSFPName::SFP2 or EnumSFPName::SFP3). Maximum, we have three SFP port to receive images data.
 	* \return structure to specify the udp network config.
     */
-    T_UDPConfig get_SFP_network_config(EnumSFPName sfp_name);
+    UDPConfig get_SFP_network_config(EnumSFPName sfp_name);
 
     /**
-    * \fn void set_SFP_network_config(T_UDPConfig udp_config, EnumSFPName sfp_name)
+    * \fn void set_SFP_network_config(UDPConfig udp_config, EnumSFPName sfp_name)
     * \brief Set network configuration for specified SFP output
     * \param udp_config : structure to specify the udp network config.
     * \param sfp_name : it is the SFPs ports name (EnumSFPName::SFP1, EnumSFPName::SFP2 or EnumSFPName::SFP3). Maximum, we have three SFP port to receive images data.
 	* \return void
     */
-    void set_SFP_network_config(T_UDPConfig udp_config, EnumSFPName sfp_name);
+    void set_SFP_network_config(UDPConfig udp_config, EnumSFPName sfp_name);
 
     /**
     * \fn void get_all_images(char ** data_images_table, EnumAcquisitionMode acq_mode, std::size_t images_nb, std::size_t & frame_number)

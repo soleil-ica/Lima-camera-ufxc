@@ -55,7 +55,7 @@ public:
     virtual ~UFXCInterface();
 
     /**
-    * \fn void open_connection(T_DaqCnxConfig tcpCnx, T_DaqCnxConfig SFPpCnx1, T_DaqCnxConfig SFPpCnx2, T_DaqCnxConfig SFPpCnx3)
+    * \fn void open_connection(DaqCnxConfig tcpCnx, DaqCnxConfig SFPpCnx1, DaqCnxConfig SFPpCnx2, DaqCnxConfig SFPpCnx3)
     * \brief open one TCP connection and tree UDP connection with DAQ
     * \param tcpCnx struct contain the tcp connection parameters (IP, Port, ...).
     * \param SFPpCnx1 struct contain the SFP1 connection parameters (IP, Port, ...).
@@ -63,7 +63,7 @@ public:
     * \param SFPpCnx3 struct contain the SFP3 connection parameters (IP, Port, ...).
 	* \return void
     */
-    void open_connection(T_DaqCnxConfig tcpCnx, T_DaqCnxConfig SFPCnx1, T_DaqCnxConfig SFPCnx2, T_DaqCnxConfig SFPCnx3);
+    void open_connection(DaqCnxConfig tcpCnx, DaqCnxConfig SFPCnx1, DaqCnxConfig SFPCnx2, DaqCnxConfig SFPCnx3);
 
     /**
     * \fn void close_connection()
