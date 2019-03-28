@@ -23,10 +23,17 @@ namespace ufxclib
 #define UFXC_CFG_GLB_REG_SIZE       128
 #define DAQ_CLOCK_PERIOD_NS         1000000
 #define SIZE_SOCK_BUF               245760
-#define COUNTER_0_MIN_FRAMES_NUMBER 57
-#define COUNTER_0_MAX_FRAMES_NUMBER 112
-#define COUNTER_1_MIN_FRAMES_NUMBER 1
-#define COUNTER_1_MAX_FRAMES_NUMBER 56
+
+#define COUNTER_0_MIN_FRAMES_NUMBER_14_BITS 57
+#define COUNTER_0_MAX_FRAMES_NUMBER_14_BITS 112
+#define COUNTER_1_MIN_FRAMES_NUMBER_14_BITS 1
+#define COUNTER_1_MAX_FRAMES_NUMBER_14_BITS 56
+
+#define COUNTER_0_MIN_FRAMES_NUMBER_2_BITS 9
+#define COUNTER_0_MAX_FRAMES_NUMBER_2_BITS 16
+#define COUNTER_1_MIN_FRAMES_NUMBER_2_BITS 1
+#define COUNTER_1_MAX_FRAMES_NUMBER_2_BITS 8
+
 #define SFP_NUMBER                  3
 #define FRAME_SIZE                  1030
 #define IMAGE_HEADER_SIZE           4
@@ -35,7 +42,7 @@ namespace ufxclib
 #define PACKET_DATA_LENGTH          1024    /// 1030 - 6 (header size)
 #define PACKET_HEADER_SIZE          6
 #define COUNTER_NUMBER              2
-#define LIB_VERSION            		"1.0.1" /// the library version
+#define LIB_VERSION            		"1.0.2" /// the library version
 #define IMAGE_WIDTH                 256     /// current image width
 #define IMAGE_HEIGHT                256     /// current image height
 #define CONFIG_FRAMES_NUMBER        224

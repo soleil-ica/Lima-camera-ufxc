@@ -664,6 +664,7 @@ void Camera::setTrigMode(TrigMode mode)
 				if(m_depth==14)
 				{
 					m_ufxc_interface->get_config_acquisition_obj()->set_acq_mode(ufxclib::EnumAcquisitionMode::software_raw);
+					DEB_TRACE()<<"Trigger Mode = software_raw (IntTrig - 14 bits)";
 				}
 				break;
 			case ExtTrigSingle:
@@ -672,10 +673,12 @@ void Camera::setTrigMode(TrigMode mode)
 				if(m_depth==2)
 				{
 					m_ufxc_interface->get_config_acquisition_obj()->set_acq_mode(ufxclib::EnumAcquisitionMode::pump_and_probe_raw);
+					DEB_TRACE()<<"Trigger Mode = pump_and_probe_raw (ExtTrigSingle - 2 bits)";
 				}
 				if(m_depth==14)
 				{
 					m_ufxc_interface->get_config_acquisition_obj()->set_acq_mode(ufxclib::EnumAcquisitionMode::external_raw);
+					DEB_TRACE()<<"Trigger Mode = external_raw (ExtTrigSingle - 14 bits)";
 				}
 
 				m_ufxc_interface->get_config_acquisition_obj()->set_images_number(m_nb_frames);
@@ -687,10 +690,12 @@ void Camera::setTrigMode(TrigMode mode)
 				if(m_depth==2)
 				{
 					m_ufxc_interface->get_config_acquisition_obj()->set_acq_mode(ufxclib::EnumAcquisitionMode::pump_and_probe_raw);
+					DEB_TRACE()<<"Trigger Mode = pump_and_probe_raw (ExtTrigMult - 2 bits)";
 				}
 				if(m_depth==14)
 				{
 					m_ufxc_interface->get_config_acquisition_obj()->set_acq_mode(ufxclib::EnumAcquisitionMode::external_raw);
+					DEB_TRACE()<<"Trigger Mode = external_raw (ExtTrigMult - 14 bits)";
 				}
 
 				m_ufxc_interface->get_config_acquisition_obj()->set_images_number(1);
@@ -874,8 +879,21 @@ void Camera::setNbFrames(int nb_frames)
 		{
 			THROW_HW_ERROR(Error) << "Number of frames to acquire has not been set";
 		}
-		m_ufxc_interface->get_config_acquisition_obj()->set_images_number(nb_frames);
-		m_nb_frames = nb_frames;
+		
+		TrigMode trigger_mode;
+		getTrigMode(trigger_mode);
+		if(trigger_mode == ExtTrigMult)
+		{
+			m_ufxc_interface->get_config_acquisition_obj()->set_images_number(1);
+			m_ufxc_interface->get_config_acquisition_obj()->set_triggers_number(nb_frames);
+			m_nb_frames = nb_frames;
+		}
+		else
+		{
+			m_ufxc_interface->get_config_acquisition_obj()->set_images_number(nb_frames);
+			m_ufxc_interface->get_config_acquisition_obj()->set_triggers_number(1);
+			m_nb_frames = nb_frames;
+		}
 	}
 	catch(const ufxclib::Exception& ue)
 	{
