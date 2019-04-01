@@ -41,8 +41,8 @@
                        
                         <includePaths>
                             <includePath>include</includePath>
-							<!--<includePath>/home/informatique/ica/noureddine/DeviceSources/Lima/camera/ufxc/sdk/linux/include</includePath>-->
-                            <includePath>/home/informatique/ica/noureddine/.m2/repository/fr/soleil/lib/UFXCLib-i386-Linux-gcc-shared-release/1.0.1-SNAPSHOT/include</includePath>
+							<includePath>/home/informatique/ica/noureddine/DeviceSources/Lima/camera/ufxc/sdk/linux/include</includePath>
+                            <!--<includePath>/home/informatique/ica/noureddine/.m2/repository/fr/soleil/lib/UFXCLib-i386-Linux-gcc-shared-release/1.0.1-SNAPSHOT/include</includePath>-->
                         </includePaths>
                         
                         <!-- define less verbose mode for gcc-->
@@ -57,8 +57,8 @@
                             <lib>
                                 <name>UFXCLib-i386-Linux-gcc-shared-release-1.0.1-SNAPSHOT</name>
                                 <type>shared</type>
-                                <!--<directory>/home/informatique/ica/noureddine/DeviceSources/Lima/camera/ufxc/sdk/linux/lib</directory>-->
-                                <directory>/home/informatique/ica/noureddine/.m2/repository/fr/soleil/lib/UFXCLib-i386-Linux-gcc-shared-release/1.0.1-SNAPSHOT/lib/i386-Linux-g++/shared</directory>
+                                <directory>/home/informatique/ica/noureddine/DeviceSources/Lima/camera/ufxc/sdk/linux/lib</directory>
+                                <!--<directory>/home/informatique/ica/noureddine/.m2/repository/fr/soleil/lib/UFXCLib-i386-Linux-gcc-shared-release/1.0.1-SNAPSHOT/lib/i386-Linux-g++/shared</directory>-->
                             </lib>
                         </libs>
                     </linker>
