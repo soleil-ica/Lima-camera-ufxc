@@ -257,7 +257,7 @@ void Camera::getStatus(Camera::Status& status)
 	}
 
 	status = m_status;
-
+	aLock.unlock();
 	DEB_RETURN() << DEB_VAR1(status);
 }
 
@@ -291,6 +291,7 @@ void Camera::readFrame(void)
 	aLock.unlock();
 	DEB_TRACE()<<"IMAGE_DATA_SIZE = "<<IMAGE_DATA_SIZE;
 	
+Timestamp t0_allocate = Timestamp::now();		
 	//allocate memory
 	char ** imgBuffer;
 	try
@@ -304,9 +305,13 @@ void Camera::readFrame(void)
         DEB_ERROR() << "Allocation failed: " << e.what();
 		THROW_HW_ERROR(Error) << e.what();      
     }		
+Timestamp t1_allocate = Timestamp::now();	
+double delta_time_allocate = t1_allocate - t0_allocate;
+DEB_TRACE()<<"---- Elapsed time of allocation memory = "<<(int) (delta_time_allocate * 1000)<<" (ms)";	
 	
 	DEB_TRACE()<<"nb. frames (requested) = "<<m_nb_frames;	
-	
+
+Timestamp t0_get_all_images = Timestamp::now();	
 	aLock.lock();	
 	size_t frames_number = 0;
 	//get all images (two counters)
@@ -314,10 +319,13 @@ void Camera::readFrame(void)
 	//calculate the received images number for two counters
 	size_t received_images_number = frames_number / m_ufxc_interface->get_data_receiver_obj()->get_frame_number_for_2_counters(mode);
 	aLock.unlock();	
+Timestamp t1_get_all_images = Timestamp::now();	
+double delta_time_get_all_images = t1_get_all_images - t0_get_all_images;
+DEB_TRACE()<<"---- Elapsed time of get_all_images() = "<<(int) (delta_time_get_all_images * 1000)<<" (ms)";
+
+	DEB_TRACE()<<"nb. frames (received) = "<<received_images_number;
 	
-	DEB_TRACE()<<"nb. frames (received) = "<<received_images_number<<"\n";
-	
-Timestamp t0_total = Timestamp::now();	
+Timestamp t0_write_file = Timestamp::now();	
 	std::stringstream filename("");	
 	std::ofstream output_file;	
 	//generate 1 file for all images
@@ -326,10 +334,13 @@ Timestamp t0_total = Timestamp::now();
     char       buf[80];
     tstruct = *localtime(&now);
     strftime(buf, sizeof(buf), "%Y-%m-%d-%X", &tstruct);
-	
+
+double delta_time_all_new_frame_ready = 0;
+double delta_time_all_write_file = 0;
+Timestamp t1_write_file = Timestamp::now();
 	filename.str("");		
 	filename<<"/dev/shm/ufxc/ufxc-data-"<<buf<<".dat";
-	DEB_TRACE()<<"filename = "<<filename.str()<<"\n";
+	DEB_TRACE()<<"filename = "<<filename.str();
 	output_file.open(filename.str(), std::ios::out | std::ofstream::binary);		
 
 	for(int i = 0;i < (received_images_number * 2);i++)
@@ -337,38 +348,39 @@ Timestamp t0_total = Timestamp::now();
 		if(i % 2 == 0)
 		{
 			//Prepare Lima Frame Ptr 
-			DEB_TRACE() << "Prepare  Lima Frame Ptr("<<i/2<<")";			
+			//DEB_TRACE() << "Prepare  Lima Frame Ptr("<<i/2<<")";			
 			bptr = buffer_mgr.getFrameBufferPtr(i/2);	
 		}		
 
+		Timestamp t0_write_file = Timestamp::now();
 		for(int j = 0;j < IMAGE_DATA_SIZE;j++)
 		{
 			output_file << int((unsigned char) (imgBuffer[i][j])) << " ";
 		}
-	
+
 		//next line for the 2nd counter
 		output_file << std::endl;
+
+		Timestamp t1_write_file = Timestamp::now();
+		delta_time_all_write_file+= (t1_write_file - t0_write_file);	
 		
+		Timestamp t0_new_frame_ready = Timestamp::now();	
 		if(i % 2 == 1 )
-		{			
-			
-			Timestamp t0_newframeready = Timestamp::now();			
+		{					
 			//Push the image buffer through Lima 
-			DEB_TRACE() << "Declare a Lima new Frame Ready (" << m_acq_frame_nb << ")";
-			
+			//DEB_TRACE() << "Declare a Lima new Frame Ready (" << m_acq_frame_nb << ")";
 			HwFrameInfoType frame_info;
 			frame_info.acq_frame_nb = m_acq_frame_nb;
 			buffer_mgr.newFrameReady(frame_info);
 			m_acq_frame_nb++;
-			
-			Timestamp t1_newframeready = Timestamp::now();
-			double delta_time_newframeready = t1_newframeready - t0_newframeready;
-			DEB_TRACE() << "newFrameReady : elapsed time = " << (int) (delta_time_newframeready * 1000) << " (ms)\n";		
 		}
+		Timestamp t1_new_frame_ready = Timestamp::now();
+		delta_time_all_new_frame_ready+= (t1_new_frame_ready - t0_new_frame_ready);	
 	}
 	
 	output_file.close();//generate 1 file for all images
-	
+
+Timestamp t0_deallocate = Timestamp::now();	
 	//free deallocate double pointer
 	if(imgBuffer)
 	{
@@ -377,11 +389,12 @@ Timestamp t0_total = Timestamp::now();
 			delete[] imgBuffer[i];
 		}
 		delete[] imgBuffer;
-	}
-	
-Timestamp t1_total = Timestamp::now();	
-double delta_time_total = t1_total - t0_total;
-DEB_TRACE()<<"elapsed time total after get_all_images() = "<<(int) (delta_time_total * 1000)<<" (ms)";
+	}	
+Timestamp t1_deallocate = Timestamp::now();	
+double delta_time_deallocate = t1_deallocate - t0_deallocate;
+DEB_TRACE() <<"---- Elapsed time of deallocation memory = "<<(int) (delta_time_deallocate * 1000)<<" (ms)";	
+DEB_TRACE() <<"---- Elapsed time of all newFrameReady = " << (int) (delta_time_all_new_frame_ready * 1000) << " (ms)";	
+DEB_TRACE() <<"---- Elapsed time of all write file = "<<(int) (delta_time_all_write_file * 1000)<<" (ms)";
 
 	//@END	
 	m_status = Camera::Busy;
@@ -481,6 +494,7 @@ void Camera::AcqThread::threadFunction()
 		aLock.lock();
 		m_cam.m_thread_running = false;
 		m_cam.m_wait_flag = true;
+		aLock.unlock();
 	}
 }
 
