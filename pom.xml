@@ -41,17 +41,22 @@
                        
                         <includePaths>
                             <includePath>include</includePath>
-							<includePath>/home/informatique/ica/noureddine/DeviceSources/Lima/camera/ufxc/sdk/linux/include</includePath>
+                            <includePath>/home/informatique/ica/noureddine/DeviceSources/Lima/camera/ufxc/sdk/linux/include</includePath>
                             <!--<includePath>/home/informatique/ica/noureddine/.m2/repository/fr/soleil/lib/UFXCLib-i386-Linux-gcc-shared-release/1.0.1-SNAPSHOT/include</includePath>-->
                         </includePaths>
                         
                         <!-- define less verbose mode for gcc-->
                         <options>
                             <option>-w</option>
+
                         </options>
+                        <defines>
+                            <define>USE_DECODE_IMAGE</define>
+                            <!--<define>USE_WRITE_FILE</define>-->
+                        </defines>
                     </cpp>
                                           
-                   <linker>
+                    <linker>
                         <libs>
                             
                             <lib>
@@ -99,3 +104,4 @@
     </developers>
 
 </project>
+

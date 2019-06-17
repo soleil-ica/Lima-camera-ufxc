@@ -36,6 +36,13 @@
 #include "UfxcCamera.h"
 #include <sys/time.h>
 #include <ctime>
+#include <cstdint>
+
+#include "constants.h"
+#include "decode14b.h"
+#include "decode2b.h"
+#include "tools.h"
+
 using namespace lima;
 using namespace lima::Ufxc;
 using namespace std;
@@ -47,7 +54,7 @@ using namespace std;
 /************************************************************************
  * \brief constructor
  ************************************************************************/
-Camera::Camera(const std::string& TCP_ip_address, unsigned long  TCP_port,
+Camera::Camera(const std::string& TCP_ip_address, unsigned long TCP_port,
 			   const std::string& SFP1_ip_address, unsigned long SFP1_port,
 			   const std::string& SFP2_ip_address, unsigned long SFP2_port,
 			   const std::string& SFP3_ip_address, unsigned long SFP3_port,
@@ -104,10 +111,10 @@ Camera::Camera(const std::string& TCP_ip_address, unsigned long  TCP_port,
 	{
 		std::ostringstream err_msg;
 		err_msg << "Error in Camera::Camera() :"
-				<< "\nreason : " << ue.errors[0].reason
-				<< "\ndesc : "	 << ue.errors[0].desc
-				<< "\norigin : " << ue.errors[0].origin
-				<< std::endl;
+		 << "\nreason : " << ue.errors[0].reason
+		 << "\ndesc : " << ue.errors[0].desc
+		 << "\norigin : " << ue.errors[0].origin
+		 << std::endl;
 		DEB_ERROR() << err_msg;
 		THROW_HW_FATAL(ErrorType::Error) << err_msg.str();
 	}
@@ -184,9 +191,9 @@ void Camera::startAcq()
 	StdBufferCbMgr& buffer_mgr = m_bufferCtrlObj.getBuffer();
 	buffer_mgr.setStartTimestamp(Timestamp::now());
 	DEB_TRACE() << "Ensure that Acquisition is Started  ";
-	
+
 	setStatus(Camera::Busy, false);
-	
+
 	//@BEGIN : Ensure that Acquisition is Started before return ...
 	m_ufxc_interface->get_config_acquisition_obj()->start_acquisition();
 	//@END
@@ -249,7 +256,7 @@ void Camera::getStatus(Camera::Status& status)
 		case ufxclib::EnumDetectorStatus::E_DET_NOT_CONFIGURED:
 			m_status = Camera::Ready;
 			//DEB_TRACE() << "E_DET_NOT_CONFIGURED";
-			break;			
+			break;
 		case ufxclib::EnumDetectorStatus::E_DET_ERROR:
 			m_status = Camera::Fault;
 			DEB_TRACE() << "E_DET_ERROR";
@@ -284,73 +291,75 @@ void Camera::readFrame(void)
 	StdBufferCbMgr& buffer_mgr = m_bufferCtrlObj.getBuffer();
 	//@BEGIN : 
 	//get Acquisitions images
-	DEB_TRACE()<<"PACKET_DATA_LENGTH = "<<PACKET_DATA_LENGTH;
+	DEB_TRACE() << "PACKET_DATA_LENGTH = " << PACKET_DATA_LENGTH;
 	AutoMutex aLock(m_cond.mutex());
 	ufxclib::EnumAcquisitionMode mode = m_ufxc_interface->get_config_acquisition_obj()->get_acq_mode();
 	size_t IMAGE_DATA_SIZE = (m_ufxc_interface->get_data_receiver_obj()->get_frame_number_for_2_counters(mode) / COUNTER_NUMBER) * PACKET_DATA_LENGTH;
 	aLock.unlock();
-	DEB_TRACE()<<"IMAGE_DATA_SIZE = "<<IMAGE_DATA_SIZE;
+	DEB_TRACE() << "IMAGE_DATA_SIZE = " << IMAGE_DATA_SIZE;
 	
-Timestamp t0_allocate = Timestamp::now();		
 	//allocate memory
-	char ** imgBuffer;
+	Timestamp t0_allocate = Timestamp::now();
+	uint8_t** imgBuffer;
 	try
 	{
-		imgBuffer = new char *[2 * m_nb_frames];
+		imgBuffer = new uint8_t*[2 * m_nb_frames];
 		for(int i = 0;i < (2 * m_nb_frames);i++)
-			imgBuffer[i] = new char[IMAGE_DATA_SIZE];
-    } 
-	catch (const std::bad_alloc& e) 
+			imgBuffer[i] = new uint8_t[IMAGE_DATA_SIZE];
+	}
+	catch(const std::bad_alloc& e)
 	{
-        DEB_ERROR() << "Allocation failed: " << e.what();
-		THROW_HW_ERROR(Error) << e.what();      
-    }		
-Timestamp t1_allocate = Timestamp::now();	
-double delta_time_allocate = t1_allocate - t0_allocate;
-DEB_TRACE()<<"---- Elapsed time of allocation memory = "<<(int) (delta_time_allocate * 1000)<<" (ms)";	
+		DEB_ERROR() << "Allocation failed: " << e.what();
+		THROW_HW_ERROR(Error) << e.what();
+	}
 	
-	DEB_TRACE()<<"nb. frames (requested) = "<<m_nb_frames;	
+	Timestamp t1_allocate = Timestamp::now();
+	double delta_time_allocate = t1_allocate - t0_allocate;
+	DEB_TRACE() << "---- Elapsed time of allocation memory = " << (int) (delta_time_allocate * 1000) << " (ms)";
 
-Timestamp t0_get_all_images = Timestamp::now();	
-	aLock.lock();	
+	DEB_TRACE() << "nb. frames (requested) = " << m_nb_frames;
+
+	Timestamp t0_get_all_images = Timestamp::now();
+	////aLock.lock();
 	size_t frames_number = 0;
 	//get all images (two counters)
-	m_ufxc_interface->get_data_receiver_obj()->get_all_images(imgBuffer, mode, m_nb_frames, frames_number);	
+	m_ufxc_interface->get_data_receiver_obj()->get_all_images((char**)imgBuffer, mode, m_nb_frames, frames_number);
 	//calculate the received images number for two counters
 	size_t received_images_number = frames_number / m_ufxc_interface->get_data_receiver_obj()->get_frame_number_for_2_counters(mode);
-	aLock.unlock();	
-Timestamp t1_get_all_images = Timestamp::now();	
-double delta_time_get_all_images = t1_get_all_images - t0_get_all_images;
-DEB_TRACE()<<"---- Elapsed time of get_all_images() = "<<(int) (delta_time_get_all_images * 1000)<<" (ms)";
+	////aLock.unlock();
+	Timestamp t1_get_all_images = Timestamp::now();
+	double delta_time_get_all_images = t1_get_all_images - t0_get_all_images;
+	DEB_TRACE() << "---- Elapsed time of get_all_images() = " << (int) (delta_time_get_all_images * 1000) << " (ms)";
 
-	DEB_TRACE()<<"nb. frames (received) = "<<received_images_number;
-	
-Timestamp t0_write_file = Timestamp::now();	
-	std::stringstream filename("");	
-	std::ofstream output_file;	
+	DEB_TRACE() << "nb. frames (received) = " << received_images_number;
+
+	double delta_time_all_new_frame_ready = 0;
+#ifdef USE_WRITE_FILE 
+	Timestamp t0_write_file = Timestamp::now();
+	std::stringstream filename("");
+	std::ofstream output_file;
 	//generate 1 file for all images
-    time_t     now = time(0);
-    struct tm  tstruct;
-    char       buf[80];
-    tstruct = *localtime(&now);
-    strftime(buf, sizeof(buf), "%Y-%m-%d-%X", &tstruct);
+	time_t now = time(0);
+	struct tm tstruct;
+	char buf[80];
+	tstruct = *localtime(&now);
+	strftime(buf, sizeof(buf), "%Y-%m-%d-%X", &tstruct);
 
-double delta_time_all_new_frame_ready = 0;
-double delta_time_all_write_file = 0;
-Timestamp t1_write_file = Timestamp::now();
-	filename.str("");		
-	filename<<"/dev/shm/ufxc/ufxc-data-"<<buf<<".dat";
-	DEB_TRACE()<<"filename = "<<filename.str();
-	output_file.open(filename.str(), std::ios::out | std::ofstream::binary);		
+	double delta_time_all_write_file = 0;	
+	Timestamp t1_write_file = Timestamp::now();
+	filename.str("");
+	filename << "/dev/shm/ufxc/ufxc-data-" << buf << ".dat";
+	DEB_TRACE() << "filename = " << filename.str();
+	output_file.open(filename.str(), std::ios::out | std::ofstream::binary);
 
 	for(int i = 0;i < (received_images_number * 2);i++)
-	{		
+	{	
 		if(i % 2 == 0)
 		{
 			//Prepare Lima Frame Ptr 
 			//DEB_TRACE() << "Prepare  Lima Frame Ptr("<<i/2<<")";			
-			bptr = buffer_mgr.getFrameBufferPtr(i/2);	
-		}		
+			bptr = buffer_mgr.getFrameBufferPtr(i / 2);
+		}
 
 		Timestamp t0_write_file = Timestamp::now();
 		for(int j = 0;j < IMAGE_DATA_SIZE;j++)
@@ -362,11 +371,11 @@ Timestamp t1_write_file = Timestamp::now();
 		output_file << std::endl;
 
 		Timestamp t1_write_file = Timestamp::now();
-		delta_time_all_write_file+= (t1_write_file - t0_write_file);	
-		
-		Timestamp t0_new_frame_ready = Timestamp::now();	
-		if(i % 2 == 1 )
-		{					
+		delta_time_all_write_file += (t1_write_file - t0_write_file);
+
+		Timestamp t0_new_frame_ready = Timestamp::now();
+		if(i % 2 == 1)
+		{
 			//Push the image buffer through Lima 
 			//DEB_TRACE() << "Declare a Lima new Frame Ready (" << m_acq_frame_nb << ")";
 			HwFrameInfoType frame_info;
@@ -375,26 +384,74 @@ Timestamp t1_write_file = Timestamp::now();
 			m_acq_frame_nb++;
 		}
 		Timestamp t1_new_frame_ready = Timestamp::now();
-		delta_time_all_new_frame_ready+= (t1_new_frame_ready - t0_new_frame_ready);	
-	}
-	
-	output_file.close();//generate 1 file for all images
+		delta_time_all_new_frame_ready += (t1_new_frame_ready - t0_new_frame_ready);
 
-Timestamp t0_deallocate = Timestamp::now();	
+	}
+
+	output_file.close();//generate 1 file for all images
+	DEB_TRACE() << "---- Elapsed time of all write file = " << (int) (delta_time_all_write_file * 1000) << " (ms)";	
+
+	DEB_TRACE() << "---- Elapsed time of all newFrameReady = " << (int) (delta_time_all_new_frame_ready * 1000) << " (ms)";	
+#endif
+
+#ifdef USE_DECODE_IMAGE	
+	double delta_time_all_decoding_image = 0;		
+
+	for(int i = 0;i <received_images_number;i++)
+	{
+		//Prepare Lima Frame Ptr 
+		//DEB_TRACE() << "Prepare  Lima Frame Ptr("<<i<<")";			
+		bptr = buffer_mgr.getFrameBufferPtr(i);			
+		
+		Timestamp t0_decoding_image = Timestamp::now();		
+		if(m_depth == 2)
+		{
+			if(i==0)//display this log once
+				DEB_TRACE()<<"decoding 2 bits image...";
+			memset(bptr,0, 512*256*1);//8 bits
+			decode_image2_twocnts((uint8_t*)imgBuffer[i*2], (uint8_t*)imgBuffer[i*2+1], (uint8_t*)bptr);
+		}
+		else
+		{
+			if(i==0)//display this once
+				DEB_TRACE()<<"decoding 14 bits image...";
+			memset(bptr,0, 512*256*2);//16 bits
+			decode_image14_twocnts((uint8_t*)imgBuffer[i*2], (uint8_t*)imgBuffer[i*2+1], (uint16_t*)bptr);
+		}
+		
+		Timestamp t1_decoding_image = Timestamp::now();
+		delta_time_all_decoding_image += (t1_decoding_image - t0_decoding_image);
+		
+		Timestamp t0_new_frame_ready = Timestamp::now();
+		
+		//Push the image buffer through Lima 
+		//DEB_TRACE() << "Declare a Lima new Frame Ready (" << m_acq_frame_nb << ")";
+		HwFrameInfoType frame_info;
+		frame_info.acq_frame_nb = m_acq_frame_nb;
+		buffer_mgr.newFrameReady(frame_info);
+		m_acq_frame_nb++;
+
+		Timestamp t1_new_frame_ready = Timestamp::now();
+		delta_time_all_new_frame_ready += (t1_new_frame_ready - t0_new_frame_ready);
+	}
+	DEB_TRACE() << "---- Elapsed time of all decoding images = " << (int) (delta_time_all_decoding_image * 1000) << " (ms)";	
+	DEB_TRACE() << "---- Elapsed time of all newFrameReady = " << (int) (delta_time_all_new_frame_ready * 1000) << " (ms)";
+#endif 
+
+	Timestamp t0_deallocate = Timestamp::now();
 	//free deallocate double pointer
 	if(imgBuffer)
 	{
-		for(int i=0;i<(2*m_nb_frames);i++)
+		for(int i = 0;i < (2 * m_nb_frames);i++)
 		{
 			delete[] imgBuffer[i];
 		}
 		delete[] imgBuffer;
-	}	
-Timestamp t1_deallocate = Timestamp::now();	
-double delta_time_deallocate = t1_deallocate - t0_deallocate;
-DEB_TRACE() <<"---- Elapsed time of deallocation memory = "<<(int) (delta_time_deallocate * 1000)<<" (ms)";	
-DEB_TRACE() <<"---- Elapsed time of all newFrameReady = " << (int) (delta_time_all_new_frame_ready * 1000) << " (ms)";	
-DEB_TRACE() <<"---- Elapsed time of all write file = "<<(int) (delta_time_all_write_file * 1000)<<" (ms)";
+	}
+	
+	Timestamp t1_deallocate = Timestamp::now();
+	double delta_time_deallocate = t1_deallocate - t0_deallocate;
+	DEB_TRACE() << "---- Elapsed time of deallocation memory = " << (int) (delta_time_deallocate * 1000) << " (ms)";	
 
 	//@END	
 	m_status = Camera::Busy;
@@ -431,8 +488,8 @@ void Camera::AcqThread::threadFunction()
 			return;
 		DEB_TRACE() << "AcqThread Running";
 		m_cam.m_thread_running = true;
-        m_cam.m_cond.broadcast();
-        aLock.unlock();
+		m_cam.m_cond.broadcast();
+		aLock.unlock();
 
 		bool continueFlag = true;
 		while(continueFlag && (!m_cam.m_nb_frames || m_cam.m_acq_frame_nb < m_cam.m_nb_frames))
@@ -447,34 +504,34 @@ void Camera::AcqThread::threadFunction()
 			}
 
 			try
-			{			
+			{
 				Camera::Status status;
-				m_cam.getStatus(status);				
+				m_cam.getStatus(status);
 				m_cam.m_cond.broadcast();
 				if(status == Camera::Busy)
-				{					
+				{
 					//DEB_TRACE()<<"Camera Busy ...";
 					usleep(400);//UFXCGui use this amount of sleep !
 					continue;
 				}
 
 				//Read Frame From API/Driver/Etc ... & Copy it into Lima Frame Ptr
-				DEB_TRACE() << "Read Frame From API/Driver/Etc ... & Copy it into Lima Frame Ptr";				
+				DEB_TRACE() << "Read Frame From API/Driver/Etc ... & Copy it into Lima Frame Ptr";
 				m_cam.readFrame();
 			}
 			catch(const ufxclib::Exception& ue)
-			{	
+			{
 				std::ostringstream err_msg;
 				err_msg << "Error in AcqThread::threadFunction() :"
-						<< "\nreason : " << ue.errors[0].reason
-						<< "\ndesc : "	 << ue.errors[0].desc
-						<< "\norigin : " << ue.errors[0].origin
-						<< std::endl;
+				 << "\nreason : " << ue.errors[0].reason
+				 << "\ndesc : " << ue.errors[0].desc
+				 << "\norigin : " << ue.errors[0].origin
+				 << std::endl;
 				DEB_ERROR() << err_msg;
-						//now detector is ready
+				//now detector is ready
 				m_cam.setStatus(Camera::Fault, false);
 				REPORT_EVENT(err_msg.str())
-				THROW_HW_ERROR(Error) << err_msg.str();      
+				THROW_HW_ERROR(Error) << err_msg.str();
 			}
 		}
 		//auto t2 = Clock::now();
@@ -487,7 +544,7 @@ void Camera::AcqThread::threadFunction()
 			DEB_TRACE() << " AcqThread: StopAcq";
 			m_cam.stopAcq();
 		}
-		
+
 		//now detector is ready
 		m_cam.setStatus(Camera::Ready, false);
 		DEB_TRACE() << " AcqThread::threadfunction() Setting thread running flag to false";
@@ -535,7 +592,7 @@ void Camera::getImageType(ImageType& type)
 		case 14: type = Bpp14;
 			break;
 		case 2: type = Bpp2;
-			break;			
+			break;
 		default:
 			THROW_HW_ERROR(Error) << "This pixel format of the camera is not managed, only (2 & 14) bits cameras are already managed!";
 			break;
@@ -561,7 +618,7 @@ void Camera::setImageType(ImageType type)
 		{
 			m_depth = 2;
 		}
-			break;			
+			break;
 		default:
 			THROW_HW_ERROR(Error) << "This pixel format of the camera is not managed, only (2 & 14) bits cameras are already managed!";
 			break;
@@ -671,49 +728,49 @@ void Camera::setTrigMode(TrigMode mode)
 				//do not write to hardware (raise exception if try to write to hardware) , but implicitly values are :
 				//nbimages = nbFrames
 				//nbtrigs = 1
-				if(m_depth==2)
+				if(m_depth == 2)
 				{
 					THROW_HW_ERROR(NotSupported) << DEB_VAR1(mode);
 				}
-				if(m_depth==14)
+				if(m_depth == 14)
 				{
 					m_ufxc_interface->get_config_acquisition_obj()->set_acq_mode(ufxclib::EnumAcquisitionMode::software_raw);
-					DEB_TRACE()<<"Trigger Mode = software_raw (IntTrig - 14 bits)";
+					DEB_TRACE() << "Trigger Mode = software_raw (IntTrig - 14 bits)";
 				}
 				break;
 			case ExtTrigSingle:
 				//nbimages = nbFrames
 				//nbtrigs = 1
-				if(m_depth==2)
+				if(m_depth == 2)
 				{
 					m_ufxc_interface->get_config_acquisition_obj()->set_acq_mode(ufxclib::EnumAcquisitionMode::pump_and_probe_raw);
-					DEB_TRACE()<<"Trigger Mode = pump_and_probe_raw (ExtTrigSingle - 2 bits)";
+					DEB_TRACE() << "Trigger Mode = pump_and_probe_raw (ExtTrigSingle - 2 bits)";
 				}
-				if(m_depth==14)
+				if(m_depth == 14)
 				{
 					m_ufxc_interface->get_config_acquisition_obj()->set_acq_mode(ufxclib::EnumAcquisitionMode::external_raw);
-					DEB_TRACE()<<"Trigger Mode = external_raw (ExtTrigSingle - 14 bits)";
+					DEB_TRACE() << "Trigger Mode = external_raw (ExtTrigSingle - 14 bits)";
 				}
 
 				m_ufxc_interface->get_config_acquisition_obj()->set_images_number(m_nb_frames);
-				m_ufxc_interface->get_config_acquisition_obj()->set_triggers_number(1);			
+				m_ufxc_interface->get_config_acquisition_obj()->set_triggers_number(1);
 				break;
 			case ExtTrigMult:
 				//nbimages = 1
 				//nbtrigs = nbFames
-				if(m_depth==2)
+				if(m_depth == 2)
 				{
 					m_ufxc_interface->get_config_acquisition_obj()->set_acq_mode(ufxclib::EnumAcquisitionMode::pump_and_probe_raw);
-					DEB_TRACE()<<"Trigger Mode = pump_and_probe_raw (ExtTrigMult - 2 bits)";
+					DEB_TRACE() << "Trigger Mode = pump_and_probe_raw (ExtTrigMult - 2 bits)";
 				}
-				if(m_depth==14)
+				if(m_depth == 14)
 				{
 					m_ufxc_interface->get_config_acquisition_obj()->set_acq_mode(ufxclib::EnumAcquisitionMode::external_raw);
-					DEB_TRACE()<<"Trigger Mode = external_raw (ExtTrigMult - 14 bits)";
+					DEB_TRACE() << "Trigger Mode = external_raw (ExtTrigMult - 14 bits)";
 				}
 
 				m_ufxc_interface->get_config_acquisition_obj()->set_images_number(1);
-				m_ufxc_interface->get_config_acquisition_obj()->set_triggers_number(m_nb_frames);					
+				m_ufxc_interface->get_config_acquisition_obj()->set_triggers_number(m_nb_frames);
 				break;
 			case ExtGate:
 				break;
@@ -726,13 +783,13 @@ void Camera::setTrigMode(TrigMode mode)
 	{
 		std::ostringstream err_msg;
 		err_msg << "Error in Camera::setTrigMode() :"
-				<< "\nreason : " << ue.errors[0].reason
-				<< "\ndesc : "	 << ue.errors[0].desc
-				<< "\norigin : " << ue.errors[0].origin
-				<< std::endl;
+		 << "\nreason : " << ue.errors[0].reason
+		 << "\ndesc : " << ue.errors[0].desc
+		 << "\norigin : " << ue.errors[0].origin
+		 << std::endl;
 		DEB_ERROR() << err_msg;
 		THROW_HW_FATAL(ErrorType::Error) << err_msg.str();
-	}	
+	}
 }
 
 //-----------------------------------------------------
@@ -763,13 +820,13 @@ void Camera::getExpTime(double& exp_time)
 	{
 		std::ostringstream err_msg;
 		err_msg << "Error in Camera::setTrigMode() :"
-				<< "\nreason : " << ue.errors[0].reason
-				<< "\ndesc : "	 << ue.errors[0].desc
-				<< "\norigin : " << ue.errors[0].origin
-				<< std::endl;
+		 << "\nreason : " << ue.errors[0].reason
+		 << "\ndesc : " << ue.errors[0].desc
+		 << "\norigin : " << ue.errors[0].origin
+		 << std::endl;
 		DEB_ERROR() << err_msg;
 		THROW_HW_FATAL(ErrorType::Error) << err_msg.str();
-	}		
+	}
 	DEB_RETURN() << DEB_VAR1(exp_time);
 }
 
@@ -791,13 +848,13 @@ void Camera::setExpTime(double exp_time)
 	{
 		std::ostringstream err_msg;
 		err_msg << "Error in Camera::setExpTime() :"
-				<< "\nreason : " << ue.errors[0].reason
-				<< "\ndesc : "	 << ue.errors[0].desc
-				<< "\norigin : " << ue.errors[0].origin
-				<< std::endl;
+		 << "\nreason : " << ue.errors[0].reason
+		 << "\ndesc : " << ue.errors[0].desc
+		 << "\norigin : " << ue.errors[0].origin
+		 << std::endl;
 		DEB_ERROR() << err_msg;
 		THROW_HW_FATAL(ErrorType::Error) << err_msg.str();
-	}		
+	}
 }
 
 //-----------------------------------------------------
@@ -818,13 +875,13 @@ void Camera::setLatTime(double lat_time)
 	{
 		std::ostringstream err_msg;
 		err_msg << "Error in Camera::setLatTime() :"
-				<< "\nreason : " << ue.errors[0].reason
-				<< "\ndesc : "	 << ue.errors[0].desc
-				<< "\norigin : " << ue.errors[0].origin
-				<< std::endl;
+		 << "\nreason : " << ue.errors[0].reason
+		 << "\ndesc : " << ue.errors[0].desc
+		 << "\norigin : " << ue.errors[0].origin
+		 << std::endl;
 		DEB_ERROR() << err_msg;
 		THROW_HW_FATAL(ErrorType::Error) << err_msg.str();
-	}	
+	}
 }
 
 //-----------------------------------------------------
@@ -846,13 +903,13 @@ void Camera::getLatTime(double& lat_time)
 	{
 		std::ostringstream err_msg;
 		err_msg << "Error in Camera::getLatTime() :"
-				<< "\nreason : " << ue.errors[0].reason
-				<< "\ndesc : "	 << ue.errors[0].desc
-				<< "\norigin : " << ue.errors[0].origin
-				<< std::endl;
+		 << "\nreason : " << ue.errors[0].reason
+		 << "\ndesc : " << ue.errors[0].desc
+		 << "\norigin : " << ue.errors[0].origin
+		 << std::endl;
 		DEB_ERROR() << err_msg;
 		THROW_HW_FATAL(ErrorType::Error) << err_msg.str();
-	}		
+	}
 }
 
 //-----------------------------------------------------
@@ -893,7 +950,7 @@ void Camera::setNbFrames(int nb_frames)
 		{
 			THROW_HW_ERROR(Error) << "Number of frames to acquire has not been set";
 		}
-		
+
 		TrigMode trigger_mode;
 		getTrigMode(trigger_mode);
 		if(trigger_mode == ExtTrigMult)
@@ -913,13 +970,13 @@ void Camera::setNbFrames(int nb_frames)
 	{
 		std::ostringstream err_msg;
 		err_msg << "Error in Camera::setNbFrames() :"
-				<< "\nreason : " << ue.errors[0].reason
-				<< "\ndesc : "	 << ue.errors[0].desc
-				<< "\norigin : " << ue.errors[0].origin
-				<< std::endl;
+		 << "\nreason : " << ue.errors[0].reason
+		 << "\ndesc : " << ue.errors[0].desc
+		 << "\norigin : " << ue.errors[0].origin
+		 << std::endl;
 		DEB_ERROR() << err_msg;
 		THROW_HW_FATAL(ErrorType::Error) << err_msg.str();
-	}		
+	}
 }
 
 //-----------------------------------------------------
@@ -938,13 +995,13 @@ void Camera::getNbFrames(int& nb_frames)
 	{
 		std::ostringstream err_msg;
 		err_msg << "Error in Camera::getNbFrames() :"
-				<< "\nreason : " << ue.errors[0].reason
-				<< "\ndesc : "	 << ue.errors[0].desc
-				<< "\norigin : " << ue.errors[0].origin
-				<< std::endl;
+		 << "\nreason : " << ue.errors[0].reason
+		 << "\ndesc : " << ue.errors[0].desc
+		 << "\norigin : " << ue.errors[0].origin
+		 << std::endl;
 		DEB_ERROR() << err_msg;
 		THROW_HW_FATAL(ErrorType::Error) << err_msg.str();
-	}		
+	}
 }
 
 //-----------------------------------------------------
@@ -960,7 +1017,7 @@ bool Camera::is_thread_running()
 ///////////////////////////////////////////////////////
 void Camera::get_lib_version(std::string & version)
 {
-	DEB_MEMBER_FUNCT();	
+	DEB_MEMBER_FUNCT();
 	AutoMutex aLock(m_cond.mutex());
 	try
 	{
@@ -970,13 +1027,13 @@ void Camera::get_lib_version(std::string & version)
 	{
 		std::ostringstream err_msg;
 		err_msg << "Error in Camera::get_lib_version() :"
-				<< "\nreason : " << ue.errors[0].reason
-				<< "\ndesc : "	 << ue.errors[0].desc
-				<< "\norigin : " << ue.errors[0].origin
-				<< std::endl;
+		 << "\nreason : " << ue.errors[0].reason
+		 << "\ndesc : " << ue.errors[0].desc
+		 << "\norigin : " << ue.errors[0].origin
+		 << std::endl;
 		DEB_ERROR() << err_msg;
 		THROW_HW_FATAL(ErrorType::Error) << err_msg.str();
-	}		
+	}
 }
 
 //-----------------------------------------------------
@@ -994,13 +1051,13 @@ void Camera::get_firmware_version(std::string & version)
 	{
 		std::ostringstream err_msg;
 		err_msg << "Error in Camera::get_firmware_version() :"
-				<< "\nreason : " << ue.errors[0].reason
-				<< "\ndesc : "	 << ue.errors[0].desc
-				<< "\norigin : " << ue.errors[0].origin
-				<< std::endl;
+		 << "\nreason : " << ue.errors[0].reason
+		 << "\ndesc : " << ue.errors[0].desc
+		 << "\norigin : " << ue.errors[0].origin
+		 << std::endl;
 		DEB_ERROR() << err_msg;
 		THROW_HW_FATAL(ErrorType::Error) << err_msg.str();
-	}		
+	}
 }
 
 //-----------------------------------------------------
@@ -1018,13 +1075,13 @@ void Camera::get_detector_temperature(unsigned long& temp)
 	{
 		std::ostringstream err_msg;
 		err_msg << "Error in Camera::get_detector_temperature() :"
-				<< "\nreason : " << ue.errors[0].reason
-				<< "\ndesc : "	 << ue.errors[0].desc
-				<< "\norigin : " << ue.errors[0].origin
-				<< std::endl;
+		 << "\nreason : " << ue.errors[0].reason
+		 << "\ndesc : " << ue.errors[0].desc
+		 << "\norigin : " << ue.errors[0].origin
+		 << std::endl;
 		DEB_ERROR() << err_msg;
 		THROW_HW_FATAL(ErrorType::Error) << err_msg.str();
-	}		
+	}
 }
 
 //-----------------------------------------------------
@@ -1042,20 +1099,20 @@ void Camera::set_threshold_Low1(float thr)
 	{
 		std::ostringstream err_msg;
 		err_msg << "Error in Camera::set_threshold_Low1() :"
-				<< "\nreason : " << ue.errors[0].reason
-				<< "\ndesc : "	 << ue.errors[0].desc
-				<< "\norigin : " << ue.errors[0].origin
-				<< std::endl;
+		 << "\nreason : " << ue.errors[0].reason
+		 << "\ndesc : " << ue.errors[0].desc
+		 << "\norigin : " << ue.errors[0].origin
+		 << std::endl;
 		DEB_ERROR() << err_msg;
 		THROW_HW_FATAL(ErrorType::Error) << err_msg.str();
-	}	
+	}
 }
 
 //-----------------------------------------------------
 //
 //-----------------------------------------------------	
 void Camera::get_threshold_Low1(unsigned long& thr)
-{	
+{
 	DEB_MEMBER_FUNCT();
 	AutoMutex aLock(m_cond.mutex());
 	try
@@ -1066,13 +1123,13 @@ void Camera::get_threshold_Low1(unsigned long& thr)
 	{
 		std::ostringstream err_msg;
 		err_msg << "Error in Camera::get_threshold_Low1() :"
-				<< "\nreason : " << ue.errors[0].reason
-				<< "\ndesc : "	 << ue.errors[0].desc
-				<< "\norigin : " << ue.errors[0].origin
-				<< std::endl;
+		 << "\nreason : " << ue.errors[0].reason
+		 << "\ndesc : " << ue.errors[0].desc
+		 << "\norigin : " << ue.errors[0].origin
+		 << std::endl;
 		DEB_ERROR() << err_msg;
 		THROW_HW_FATAL(ErrorType::Error) << err_msg.str();
-	}		
+	}
 }
 
 //-----------------------------------------------------
@@ -1090,13 +1147,13 @@ void Camera::set_threshold_Low2(float thr)
 	{
 		std::ostringstream err_msg;
 		err_msg << "Error in Camera::set_threshold_Low2() :"
-				<< "\nreason : " << ue.errors[0].reason
-				<< "\ndesc : "	 << ue.errors[0].desc
-				<< "\norigin : " << ue.errors[0].origin
-				<< std::endl;
+		 << "\nreason : " << ue.errors[0].reason
+		 << "\ndesc : " << ue.errors[0].desc
+		 << "\norigin : " << ue.errors[0].origin
+		 << std::endl;
 		DEB_ERROR() << err_msg;
 		THROW_HW_FATAL(ErrorType::Error) << err_msg.str();
-	}		
+	}
 }
 
 //-----------------------------------------------------
@@ -1114,13 +1171,13 @@ void Camera::get_threshold_Low2(unsigned long& thr)
 	{
 		std::ostringstream err_msg;
 		err_msg << "Error in Camera::get_threshold_Low2() :"
-				<< "\nreason : " << ue.errors[0].reason
-				<< "\ndesc : "	 << ue.errors[0].desc
-				<< "\norigin : " << ue.errors[0].origin
-				<< std::endl;
+		 << "\nreason : " << ue.errors[0].reason
+		 << "\ndesc : " << ue.errors[0].desc
+		 << "\norigin : " << ue.errors[0].origin
+		 << std::endl;
 		DEB_ERROR() << err_msg;
 		THROW_HW_FATAL(ErrorType::Error) << err_msg.str();
-	}		
+	}
 }
 
 //-----------------------------------------------------
@@ -1138,13 +1195,13 @@ void Camera::set_threshold_High1(float thr)
 	{
 		std::ostringstream err_msg;
 		err_msg << "Error in Camera::set_threshold_High1() :"
-				<< "\nreason : " << ue.errors[0].reason
-				<< "\ndesc : "	 << ue.errors[0].desc
-				<< "\norigin : " << ue.errors[0].origin
-				<< std::endl;
+		 << "\nreason : " << ue.errors[0].reason
+		 << "\ndesc : " << ue.errors[0].desc
+		 << "\norigin : " << ue.errors[0].origin
+		 << std::endl;
 		DEB_ERROR() << err_msg;
 		THROW_HW_FATAL(ErrorType::Error) << err_msg.str();
-	}			
+	}
 }
 
 //-----------------------------------------------------
@@ -1162,13 +1219,13 @@ void Camera::get_threshold_High1(unsigned long& thr)
 	{
 		std::ostringstream err_msg;
 		err_msg << "Error in Camera::get_threshold_High1() :"
-				<< "\nreason : " << ue.errors[0].reason
-				<< "\ndesc : "	 << ue.errors[0].desc
-				<< "\norigin : " << ue.errors[0].origin
-				<< std::endl;
+		 << "\nreason : " << ue.errors[0].reason
+		 << "\ndesc : " << ue.errors[0].desc
+		 << "\norigin : " << ue.errors[0].origin
+		 << std::endl;
 		DEB_ERROR() << err_msg;
 		THROW_HW_FATAL(ErrorType::Error) << err_msg.str();
-	}		
+	}
 }
 
 //-----------------------------------------------------
@@ -1186,13 +1243,13 @@ void Camera::set_threshold_High2(float thr)
 	{
 		std::ostringstream err_msg;
 		err_msg << "Error in Camera::set_threshold_High2() :"
-				<< "\nreason : " << ue.errors[0].reason
-				<< "\ndesc : "	 << ue.errors[0].desc
-				<< "\norigin : " << ue.errors[0].origin
-				<< std::endl;
+		 << "\nreason : " << ue.errors[0].reason
+		 << "\ndesc : " << ue.errors[0].desc
+		 << "\norigin : " << ue.errors[0].origin
+		 << std::endl;
 		DEB_ERROR() << err_msg;
 		THROW_HW_FATAL(ErrorType::Error) << err_msg.str();
-	}		
+	}
 }
 
 //-----------------------------------------------------
@@ -1210,13 +1267,13 @@ void Camera::set_detector_config_file(const std::string& file_name)
 	{
 		std::ostringstream err_msg;
 		err_msg << "Error in Camera::set_detector_config_file() :"
-				<< "\nreason : " << ue.errors[0].reason
-				<< "\ndesc : "	 << ue.errors[0].desc
-				<< "\norigin : " << ue.errors[0].origin
-				<< std::endl;
+		 << "\nreason : " << ue.errors[0].reason
+		 << "\ndesc : " << ue.errors[0].desc
+		 << "\norigin : " << ue.errors[0].origin
+		 << std::endl;
 		DEB_ERROR() << err_msg;
 		THROW_HW_FATAL(ErrorType::Error) << err_msg.str();
-	}	
+	}
 }
 
 //-----------------------------------------------------
@@ -1234,16 +1291,14 @@ void Camera::get_threshold_High2(unsigned long& thr)
 	{
 		std::ostringstream err_msg;
 		err_msg << "Error in Camera::get_threshold_High2() :"
-				<< "\nreason : " << ue.errors[0].reason
-				<< "\ndesc : "	 << ue.errors[0].desc
-				<< "\norigin : " << ue.errors[0].origin
-				<< std::endl;
+		 << "\nreason : " << ue.errors[0].reason
+		 << "\ndesc : " << ue.errors[0].desc
+		 << "\norigin : " << ue.errors[0].origin
+		 << std::endl;
 		DEB_ERROR() << err_msg;
 		THROW_HW_FATAL(ErrorType::Error) << err_msg.str();
-	}		
+	}
 }
-	
-	
 /*******************************************************
  * \brief Set the Hardware registers in the DAQ system
  *******************************************************/
