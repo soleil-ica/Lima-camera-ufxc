@@ -54,11 +54,13 @@ using namespace std;
 /************************************************************************
  * \brief constructor
  ************************************************************************/
-Camera::Camera(const std::string& TCP_ip_address, unsigned long TCP_port,
-			   const std::string& SFP1_ip_address, unsigned long SFP1_port,
-			   const std::string& SFP2_ip_address, unsigned long SFP2_port,
-			   const std::string& SFP3_ip_address, unsigned long SFP3_port,
-			   unsigned long timeout_ms)
+Camera::Camera(	const std::string& TCP_ip_address, unsigned long TCP_port,
+				const std::string& SFP1_ip_address, unsigned long SFP1_port,
+				const std::string& SFP2_ip_address, unsigned long SFP2_port,
+				const std::string& SFP3_ip_address, unsigned long SFP3_port,
+				unsigned long timeout_ms,
+				bool is_geometrical_correction_enabled,
+				bool is_stack_frames_sum_enabled)
 {
 	DEB_CONSTRUCTOR();
 
@@ -70,6 +72,12 @@ Camera::Camera(const std::string& TCP_ip_address, unsigned long TCP_port,
 	m_depth = 14;
 	m_acq_frame_nb = 0;
 	m_nb_frames = 1;
+	m_pump_probe_trigger_acquisition_frequency = 1;
+	m_pump_probe_nb_frames = 1;		
+	m_is_geometrical_correction_enabled = is_geometrical_correction_enabled;		
+        m_is_stack_frames_sum_enabled = is_stack_frames_sum_enabled;    
+DEB_TRACE()<<"m_is_geometrical_correction_enabled = "<<m_is_geometrical_correction_enabled;
+DEB_TRACE()<<"m_is_stack_frames_sum_enabled = "<<m_is_stack_frames_sum_enabled;
 	try
 	{
 		ufxclib::DaqCnxConfig TCP_cnx, SFP1_cnx, SFP2_cnx, SFP3_cnx;
@@ -301,10 +309,12 @@ void Camera::readFrame(void)
 	//allocate memory
 	Timestamp t0_allocate = Timestamp::now();
 	uint8_t** imgBuffer;
+	int nb_frames = (m_depth == 14 ? m_nb_frames : m_pump_probe_nb_frames);
+
 	try
 	{
-		imgBuffer = new uint8_t*[2 * m_nb_frames];
-		for(int i = 0;i < (2 * m_nb_frames);i++)
+		imgBuffer = new uint8_t*[2 * nb_frames];
+		for(int i = 0;i < (2 * nb_frames);i++)
 			imgBuffer[i] = new uint8_t[IMAGE_DATA_SIZE];
 	}
 	catch(const std::bad_alloc& e)
@@ -317,13 +327,13 @@ void Camera::readFrame(void)
 	double delta_time_allocate = t1_allocate - t0_allocate;
 	DEB_TRACE() << "---- Elapsed time of allocation memory = " << (int) (delta_time_allocate * 1000) << " (ms)";
 
-	DEB_TRACE() << "nb. frames (requested) = " << m_nb_frames;
+	DEB_TRACE() << "nb. frames (requested) = " << nb_frames;
 
 	Timestamp t0_get_all_images = Timestamp::now();
 	////aLock.lock();
 	size_t frames_number = 0;
 	//get all images (two counters)
-	m_ufxc_interface->get_data_receiver_obj()->get_all_images((char**)imgBuffer, mode, m_nb_frames, frames_number);
+	m_ufxc_interface->get_data_receiver_obj()->get_all_images((char**) imgBuffer, mode, nb_frames, frames_number);
 	//calculate the received images number for two counters
 	size_t received_images_number = frames_number / m_ufxc_interface->get_data_receiver_obj()->get_frame_number_for_2_counters(mode);
 	////aLock.unlock();
@@ -345,7 +355,7 @@ void Camera::readFrame(void)
 	tstruct = *localtime(&now);
 	strftime(buf, sizeof(buf), "%Y-%m-%d-%X", &tstruct);
 
-	double delta_time_all_write_file = 0;	
+	double delta_time_all_write_file = 0;
 	Timestamp t1_write_file = Timestamp::now();
 	filename.str("");
 	filename << "/dev/shm/ufxc/ufxc-data-" << buf << ".dat";
@@ -353,7 +363,7 @@ void Camera::readFrame(void)
 	output_file.open(filename.str(), std::ios::out | std::ofstream::binary);
 
 	for(int i = 0;i < (received_images_number * 2);i++)
-	{	
+	{
 		if(i % 2 == 0)
 		{
 			//Prepare Lima Frame Ptr 
@@ -389,69 +399,108 @@ void Camera::readFrame(void)
 	}
 
 	output_file.close();//generate 1 file for all images
-	DEB_TRACE() << "---- Elapsed time of all write file = " << (int) (delta_time_all_write_file * 1000) << " (ms)";	
+	DEB_TRACE() << "---- Elapsed time of all write file = " << (int) (delta_time_all_write_file * 1000) << " (ms)";
 
-	DEB_TRACE() << "---- Elapsed time of all newFrameReady = " << (int) (delta_time_all_new_frame_ready * 1000) << " (ms)";	
+	DEB_TRACE() << "---- Elapsed time of all newFrameReady = " << (int) (delta_time_all_new_frame_ready * 1000) << " (ms)";
 #endif
 
-#ifdef USE_DECODE_IMAGE	
-	double delta_time_all_decoding_image = 0;		
+#ifdef USE_DECODE_IMAGE 
+	double delta_time_all_decoding_image = 0;
 
-	for(int i = 0;i <received_images_number;i++)
+	if(m_depth == 2)
 	{
-		//Prepare Lima Frame Ptr 
-		//DEB_TRACE() << "Prepare  Lima Frame Ptr("<<i<<")";			
-		bptr = buffer_mgr.getFrameBufferPtr(i);			
-		
-		Timestamp t0_decoding_image = Timestamp::now();		
-		if(m_depth == 2)
+		int nb_loop = (m_is_stack_frames_sum_enabled?1:received_images_number);
+		for(int i = 0;i < nb_loop;i++)
 		{
-			if(i==0)//display this log once
-				DEB_TRACE()<<"decoding 2 bits image...";
-			memset(bptr,0, 512*256*1);//8 bits
-			decode_image2_twocnts((uint8_t*)imgBuffer[i*2], (uint8_t*)imgBuffer[i*2+1], (uint8_t*)bptr);
-		}
-		else
-		{
-			if(i==0)//display this once
-				DEB_TRACE()<<"decoding 14 bits image...";
-			memset(bptr,0, 512*256*2);//16 bits
-			decode_image14_twocnts((uint8_t*)imgBuffer[i*2], (uint8_t*)imgBuffer[i*2+1], (uint16_t*)bptr);
-		}
-		
-		Timestamp t1_decoding_image = Timestamp::now();
-		delta_time_all_decoding_image += (t1_decoding_image - t0_decoding_image);
-		
-		Timestamp t0_new_frame_ready = Timestamp::now();
-		
-		//Push the image buffer through Lima 
-		//DEB_TRACE() << "Declare a Lima new Frame Ready (" << m_acq_frame_nb << ")";
-		HwFrameInfoType frame_info;
-		frame_info.acq_frame_nb = m_acq_frame_nb;
-		buffer_mgr.newFrameReady(frame_info);
-		m_acq_frame_nb++;
+			//Prepare Lima Frame Ptr 
+			//DEB_TRACE() << "Prepare  Lima Frame Ptr("<<i<<")";			
+			bptr = buffer_mgr.getFrameBufferPtr(i);
 
-		Timestamp t1_new_frame_ready = Timestamp::now();
-		delta_time_all_new_frame_ready += (t1_new_frame_ready - t0_new_frame_ready);
+			Timestamp t0_decoding_image = Timestamp::now();
+			DEB_TRACE() << "decoding 2 bits image...";
+			unsigned width 	= (m_is_geometrical_correction_enabled?512+2:512);
+			unsigned height = (m_is_stack_frames_sum_enabled?512:256);
+			unsigned nb_bytes = (m_is_stack_frames_sum_enabled?4:1);//32bits if frames summed, 8 bits otherwise
+
+			memset(bptr, 0, width * height * nb_bytes);
+
+			if(m_is_stack_frames_sum_enabled)				
+				;//decode_image2_pumpprobe((uint8_t**)imgBuffer, (uint32_t*)bptr, received_images_number, m_is_stack_frames_sum_enabled, m_is_geometrical_correction_enabled);
+			else				
+				decode_image2_twocnts((uint8_t*)imgBuffer[i*2], (uint8_t*)imgBuffer[i*2+1], (uint8_t*)bptr);
+			
+			Timestamp t1_decoding_image = Timestamp::now();
+			delta_time_all_decoding_image += (t1_decoding_image - t0_decoding_image);
+
+			Timestamp t0_new_frame_ready = Timestamp::now();
+
+			//Push the image buffer through Lima 
+			//DEB_TRACE() << "Declare a Lima new Frame Ready (" << m_acq_frame_nb << ")";
+			HwFrameInfoType frame_info;
+			frame_info.acq_frame_nb = m_acq_frame_nb;
+			buffer_mgr.newFrameReady(frame_info);
+			m_acq_frame_nb++;
+
+			Timestamp t1_new_frame_ready = Timestamp::now();
+			delta_time_all_new_frame_ready += (t1_new_frame_ready - t0_new_frame_ready);
+		}
+		DEB_TRACE() << "---- Elapsed time of all decoding images = " << (int) (delta_time_all_decoding_image * 1000) << " (ms)";
+		DEB_TRACE() << "---- Elapsed time of all newFrameReady = " << (int) (delta_time_all_new_frame_ready * 1000) << " (ms)";
 	}
-	DEB_TRACE() << "---- Elapsed time of all decoding images = " << (int) (delta_time_all_decoding_image * 1000) << " (ms)";	
-	DEB_TRACE() << "---- Elapsed time of all newFrameReady = " << (int) (delta_time_all_new_frame_ready * 1000) << " (ms)";
+	else //(m_depth == 14)
+	{
+		for(int i = 0;i < received_images_number;i++)
+		{
+			//Prepare Lima Frame Ptr 
+			//DEB_TRACE() << "Prepare  Lima Frame Ptr("<<i<<")";			
+			bptr = buffer_mgr.getFrameBufferPtr(i);
+
+			Timestamp t0_decoding_image = Timestamp::now();
+
+			if(i == 0)//display this once
+				DEB_TRACE() << "decoding 14 bits image...";
+			unsigned width 	= (m_is_geometrical_correction_enabled?512+2:512);
+			unsigned height 	= 256;	
+			unsigned nb_bytes = 2;//always 16 bits, no sum is available in this mode
+			memset(bptr, 0, width * height*nb_bytes);
+				
+			decode_image14_twocnts((uint8_t*) imgBuffer[i * 2], (uint8_t*) imgBuffer[i * 2 + 1], (uint16_t*) bptr);
+
+			Timestamp t1_decoding_image = Timestamp::now();
+			delta_time_all_decoding_image += (t1_decoding_image - t0_decoding_image);
+
+			Timestamp t0_new_frame_ready = Timestamp::now();
+
+			//Push the image buffer through Lima 
+			//DEB_TRACE() << "Declare a Lima new Frame Ready (" << m_acq_frame_nb << ")";
+			HwFrameInfoType frame_info;
+			frame_info.acq_frame_nb = m_acq_frame_nb;
+			buffer_mgr.newFrameReady(frame_info);
+			m_acq_frame_nb++;
+
+			Timestamp t1_new_frame_ready = Timestamp::now();
+			delta_time_all_new_frame_ready += (t1_new_frame_ready - t0_new_frame_ready);
+		}
+		DEB_TRACE() <<
+ "---- Elapsed time of all decoding images = " << (int) (delta_time_all_decoding_image * 1000) << " (ms)";
+		DEB_TRACE() << "---- Elapsed time of all newFrameReady = " << (int) (delta_time_all_new_frame_ready * 1000) << " (ms)";
+	}
 #endif 
 
 	Timestamp t0_deallocate = Timestamp::now();
 	//free deallocate double pointer
 	if(imgBuffer)
 	{
-		for(int i = 0;i < (2 * m_nb_frames);i++)
+		for(int i = 0;i < (2 * nb_frames);i++)
 		{
 			delete[] imgBuffer[i];
 		}
 		delete[] imgBuffer;
 	}
-	
+
 	Timestamp t1_deallocate = Timestamp::now();
 	double delta_time_deallocate = t1_deallocate - t0_deallocate;
-	DEB_TRACE() << "---- Elapsed time of deallocation memory = " << (int) (delta_time_deallocate * 1000) << " (ms)";	
+	DEB_TRACE() << "---- Elapsed time of deallocation memory = " << (int) (delta_time_deallocate * 1000) << " (ms)";
 
 	//@END	
 	m_status = Camera::Busy;
@@ -589,9 +638,13 @@ void Camera::getImageType(ImageType& type)
 	DEB_MEMBER_FUNCT();
 	switch(m_depth)
 	{
+		case 2: 
+			if(!m_is_stack_frames_sum_enabled)
+				type = Bpp2;
+			else
+				type = Bpp32;
+			break;		
 		case 14: type = Bpp14;
-			break;
-		case 2: type = Bpp2;
 			break;
 		default:
 			THROW_HW_ERROR(Error) << "This pixel format of the camera is not managed, only (2 & 14) bits cameras are already managed!";
@@ -609,16 +662,18 @@ void Camera::setImageType(ImageType type)
 	DEB_TRACE() << "Camera::setImageType - " << DEB_VAR1(type);
 	switch(type)
 	{
-		case Bpp14:
-		{
-			m_depth = 14;
-		}
-			break;
 		case Bpp2:
 		{
 			m_depth = 2;
 		}
 			break;
+
+		case Bpp14:
+		{
+			m_depth = 14;
+		}
+			break;
+
 		default:
 			THROW_HW_ERROR(Error) << "This pixel format of the camera is not managed, only (2 & 14) bits cameras are already managed!";
 			break;
@@ -655,9 +710,23 @@ void Camera::getDetectorImageSize(Size& size)
 	DEB_MEMBER_FUNCT();
 	AutoMutex aLock(m_cond.mutex());
 	//@BEGIN : Get Detector type from Driver/API	
-	unsigned width = m_ufxc_interface->get_config_acquisition_obj()->get_current_width();
-	unsigned height = m_ufxc_interface->get_config_acquisition_obj()->get_current_height();
-	size = Size(width * 2, 256);
+
+	if(m_depth == 2)
+	{
+		//unsigned width = m_ufxc_interface->get_config_acquisition_obj()->get_current_width();
+		//unsigned height = m_ufxc_interface->get_config_acquisition_obj()->get_current_height();
+		unsigned width 	= (m_is_geometrical_correction_enabled?512+2:512);
+		unsigned height = (m_is_stack_frames_sum_enabled?512:256);
+                size = Size(width, height);
+	}
+	else //if(m_depth == 14)
+	{
+		//unsigned width = m_ufxc_interface->get_config_acquisition_obj()->get_current_width();
+		//unsigned height = m_ufxc_interface->get_config_acquisition_obj()->get_current_height();
+		unsigned width 	= (m_is_geometrical_correction_enabled?512+2:512);
+		unsigned height 	= 256;	
+                size = Size(width, height);	
+	}
 	//@END
 }
 
@@ -743,8 +812,7 @@ void Camera::setTrigMode(TrigMode mode)
 				//nbtrigs = 1
 				if(m_depth == 2)
 				{
-					m_ufxc_interface->get_config_acquisition_obj()->set_acq_mode(ufxclib::EnumAcquisitionMode::pump_and_probe_raw);
-					DEB_TRACE() << "Trigger Mode = pump_and_probe_raw (ExtTrigSingle - 2 bits)";
+					THROW_HW_ERROR(NotSupported) << DEB_VAR1(mode);
 				}
 				if(m_depth == 14)
 				{
@@ -761,18 +829,17 @@ void Camera::setTrigMode(TrigMode mode)
 				if(m_depth == 2)
 				{
 					m_ufxc_interface->get_config_acquisition_obj()->set_acq_mode(ufxclib::EnumAcquisitionMode::pump_and_probe_raw);
+					m_ufxc_interface->get_config_acquisition_obj()->set_images_number(1);
+					m_ufxc_interface->get_config_acquisition_obj()->set_triggers_number(m_pump_probe_nb_frames);
 					DEB_TRACE() << "Trigger Mode = pump_and_probe_raw (ExtTrigMult - 2 bits)";
 				}
 				if(m_depth == 14)
 				{
 					m_ufxc_interface->get_config_acquisition_obj()->set_acq_mode(ufxclib::EnumAcquisitionMode::external_raw);
+					m_ufxc_interface->get_config_acquisition_obj()->set_images_number(1);
+					m_ufxc_interface->get_config_acquisition_obj()->set_triggers_number(m_nb_frames);
 					DEB_TRACE() << "Trigger Mode = external_raw (ExtTrigMult - 14 bits)";
 				}
-
-				m_ufxc_interface->get_config_acquisition_obj()->set_images_number(1);
-				m_ufxc_interface->get_config_acquisition_obj()->set_triggers_number(m_nb_frames);
-				break;
-			case ExtGate:
 				break;
 			default:
 				THROW_HW_ERROR(NotSupported) << DEB_VAR1(mode);
@@ -953,7 +1020,14 @@ void Camera::setNbFrames(int nb_frames)
 
 		TrigMode trigger_mode;
 		getTrigMode(trigger_mode);
-		if(trigger_mode == ExtTrigMult)
+		if(trigger_mode == ExtTrigMult && m_depth == 2)
+		{
+
+			m_ufxc_interface->get_config_acquisition_obj()->set_images_number(1);
+			m_ufxc_interface->get_config_acquisition_obj()->set_triggers_number(m_pump_probe_nb_frames);
+			m_nb_frames = (m_is_stack_frames_sum_enabled?1:m_pump_probe_nb_frames);
+		}
+		else if(trigger_mode == ExtTrigMult && m_depth == 14)
 		{
 			m_ufxc_interface->get_config_acquisition_obj()->set_images_number(1);
 			m_ufxc_interface->get_config_acquisition_obj()->set_triggers_number(nb_frames);
@@ -988,8 +1062,17 @@ void Camera::getNbFrames(int& nb_frames)
 	AutoMutex aLock(m_cond.mutex());
 	try
 	{
-		nb_frames = m_ufxc_interface->get_config_acquisition_obj()->get_images_number();
-		m_nb_frames = nb_frames;
+		if(m_depth == 2)
+		{
+			nb_frames = (m_is_stack_frames_sum_enabled?1:m_pump_probe_nb_frames);
+			m_nb_frames = nb_frames;
+		}
+		else //if(m_depth == 14)
+		{
+			nb_frames = m_ufxc_interface->get_config_acquisition_obj()->get_images_number();
+			m_nb_frames = nb_frames;
+		}
+
 	}
 	catch(const ufxclib::Exception& ue)
 	{
@@ -1359,4 +1442,32 @@ void Camera::SetHardwareRegisters()
 	m_monitor_registers[ufxclib::EnumMonitoringKey::ABORT_DELAY] = "FMC.AbortAcq";
 	m_monitor_registers[ufxclib::EnumMonitoringKey::FIRMWARE_VERSION] = "*IDN";
 	m_monitor_registers[ufxclib::EnumMonitoringKey::EN_PIXCONF_SCANDELAY_SFP] = "FMC.EN_PIXCONF_SCANDELAY_SFP";
+}
+/*******************************************************
+ * \brief Set trigger acquisition frequency for the pump and probe mode (2bits & ext triggger multi)
+ *******************************************************/
+void Camera::set_pump_probe_trigger_acquisition_frequency(float frequency)
+{
+	m_pump_probe_trigger_acquisition_frequency = frequency;
+}
+/*******************************************************
+ * \brief get trigger acquisition frequency for the pump and probe mode (2bits & ext triggger multi)
+ *******************************************************/
+void Camera::get_pump_probe_trigger_acquisition_frequency(float& frequency)
+{
+	frequency = m_pump_probe_trigger_acquisition_frequency;
+}
+/*******************************************************
+ * \brief set nb frames for the pump and probe mode (2bits & ext triggger multi)
+ *******************************************************/
+void Camera::set_pump_probe_nb_frames(float nb_frames)
+{
+	m_pump_probe_nb_frames = nb_frames;
+}
+/*******************************************************
+ * \brief get nb frames for the pump and probe mode (2bits & ext triggger multi)
+ *******************************************************/
+void Camera::get_pump_probe_nb_frames(float& nb_frames)
+{
+	nb_frames = m_pump_probe_nb_frames;
 }

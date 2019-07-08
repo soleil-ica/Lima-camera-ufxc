@@ -79,11 +79,13 @@ public:
 
     //==================================================================
     // constructor
-    Camera( const std::string&  TCP_ip_address,  unsigned long TCP_port,  //- IP Address and port for the config
-            const std::string&  SFP1_ip_address, unsigned long SFP1_port, //- IP Address and port for the SFP1
-            const std::string&  SFP2_ip_address, unsigned long SFP2_port, //- IP Address and port for the SFP2
-            const std::string&  SFP3_ip_address, unsigned long SFP3_port, //- IP Address and port for the SFP3
-            unsigned long       timeout_ms     //- timeout in ms
+    Camera( const std::string&  TCP_ip_address,  unsigned long TCP_port,    //- IP Address and port for the config
+            const std::string&  SFP1_ip_address, unsigned long SFP1_port,   //- IP Address and port for the SFP1
+            const std::string&  SFP2_ip_address, unsigned long SFP2_port,   //- IP Address and port for the SFP2
+            const std::string&  SFP3_ip_address, unsigned long SFP3_port,   //- IP Address and port for the SFP3
+            unsigned long       timeout_ms,                                 //- timeout in ms
+            bool                is_geometrical_correction_enabled,          //- geometrical correction enabled/disabled
+            bool                is_stack_frames_sum_enabled                 //- stack frames sum enabled/disabled
             );
     virtual ~Camera();
 
@@ -142,6 +144,10 @@ public:
     void set_threshold_High2(float thr);
     void get_threshold_High2(unsigned long& thr);
     void set_detector_config_file(const std::string& file_name);    
+    void set_pump_probe_trigger_acquisition_frequency(float frequency);
+    void get_pump_probe_trigger_acquisition_frequency(float& frequency);
+    void set_pump_probe_nb_frames(float nb_frames);
+    void get_pump_probe_nb_frames(float& nb_frames);    
 private:
 
     //get frame from API/Driver/etc ...
@@ -166,6 +172,10 @@ private:
     int                 m_acq_frame_nb; // nos of frames acquired
     mutable             Cond m_cond;
     long                m_depth;
+    float               m_pump_probe_trigger_acquisition_frequency;
+    float               m_pump_probe_nb_frames;
+    bool                m_is_geometrical_correction_enabled;    
+    bool                m_is_stack_frames_sum_enabled;    
     Camera::Status      m_status;
 
     // UFXC lib main object
