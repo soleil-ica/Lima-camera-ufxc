@@ -75,9 +75,9 @@ Camera::Camera(	const std::string& TCP_ip_address, unsigned long TCP_port,
 	m_pump_probe_trigger_acquisition_frequency = 1;
 	m_pump_probe_nb_frames = 1;		
 	m_is_geometrical_correction_enabled = is_geometrical_correction_enabled;		
-        m_is_stack_frames_sum_enabled = is_stack_frames_sum_enabled;    
-DEB_TRACE()<<"m_is_geometrical_correction_enabled = "<<m_is_geometrical_correction_enabled;
-DEB_TRACE()<<"m_is_stack_frames_sum_enabled = "<<m_is_stack_frames_sum_enabled;
+    m_is_stack_frames_sum_enabled = is_stack_frames_sum_enabled;    
+	DEB_TRACE()<<"m_is_geometrical_correction_enabled = "<<m_is_geometrical_correction_enabled;
+	DEB_TRACE()<<"m_is_stack_frames_sum_enabled = "<<m_is_stack_frames_sum_enabled;
 	try
 	{
 		ufxclib::DaqCnxConfig TCP_cnx, SFP1_cnx, SFP2_cnx, SFP3_cnx;
@@ -425,9 +425,9 @@ void Camera::readFrame(void)
 			memset(bptr, 0, width * height * nb_bytes);
 
 			if(m_is_stack_frames_sum_enabled)				
-				;//decode_image2_pumpprobe((uint8_t**)imgBuffer, (uint32_t*)bptr, received_images_number, m_is_stack_frames_sum_enabled, m_is_geometrical_correction_enabled);
-			else				
-				decode_image2_twocnts((uint8_t*)imgBuffer[i*2], (uint8_t*)imgBuffer[i*2+1], (uint8_t*)bptr);
+				decode_image2_pumpprobe((uint8_t**)imgBuffer, (uint32_t*)bptr, received_images_number, m_is_geometrical_correction_enabled);				
+			else
+				THROW_HW_ERROR(Error) << "This decoding mode is not yet implemented !";//decode_image2_twocnts((uint8_t*)imgBuffer[i*2], (uint8_t*)imgBuffer[i*2+1], (uint8_t*)bptr);
 			
 			Timestamp t1_decoding_image = Timestamp::now();
 			delta_time_all_decoding_image += (t1_decoding_image - t0_decoding_image);
@@ -711,21 +711,23 @@ void Camera::getDetectorImageSize(Size& size)
 	AutoMutex aLock(m_cond.mutex());
 	//@BEGIN : Get Detector type from Driver/API	
 
-	if(m_depth == 2)
+	int width = 0;
+	int height = 0;
+	if(m_depth == 2 || m_is_stack_frames_sum_enabled)//@@TODO pour contourner un pb de taille image !
 	{
 		//unsigned width = m_ufxc_interface->get_config_acquisition_obj()->get_current_width();
 		//unsigned height = m_ufxc_interface->get_config_acquisition_obj()->get_current_height();
-		unsigned width 	= (m_is_geometrical_correction_enabled?512+2:512);
-		unsigned height = (m_is_stack_frames_sum_enabled?512:256);
-                size = Size(width, height);
+		width 	= (m_is_geometrical_correction_enabled?512+2:512);
+		height = (m_is_stack_frames_sum_enabled?512:256);
+        size = Size(width, height);
 	}
 	else //if(m_depth == 14)
 	{
 		//unsigned width = m_ufxc_interface->get_config_acquisition_obj()->get_current_width();
 		//unsigned height = m_ufxc_interface->get_config_acquisition_obj()->get_current_height();
-		unsigned width 	= (m_is_geometrical_correction_enabled?512+2:512);
-		unsigned height 	= 256;	
-                size = Size(width, height);	
+		width 	= (m_is_geometrical_correction_enabled?512+2:512);
+		height 	= 256;	
+        size = Size(width, height);	
 	}
 	//@END
 }
