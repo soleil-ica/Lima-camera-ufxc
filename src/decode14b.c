@@ -10,6 +10,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <stdint.h>
+#include <string.h>
 
 #include "../include/constants.h"
 
@@ -27,11 +28,13 @@ extern const int row_order[];
  *  - int bit_pos         : position (number) of the current bit within the
  *                          pixel counter value
  */
-void update_pixcnt14(uint16_t *p_pixcnt14, uint8_t rawbit, int bit_pos){
+void update_bit_pixcnt14(uint16_t *p_pixcnt14, uint8_t rawbit, int bit_pos){
   // the pixel counter value is changed only if the raw bit is not 0. The
   // counter pixel buffer has been initialized with 0.
   if (rawbit != 0)
     *p_pixcnt14 = *p_pixcnt14 | (1<<bit_pos);
+//  else
+//    *p_pixcnt14 = *p_pixcnt14 & (0<<bit_pos);
 }
 
 
@@ -43,11 +46,11 @@ void update_pixcnt14(uint16_t *p_pixcnt14, uint8_t rawbit, int bit_pos){
  *   events = 16383 => counter = 1 (0x0001)
  *
  *  Args:
- *  - uint16_t *p_pixcnt14 : pointer to the pixel counter value
+ *  - uint16_t *p_image : pointer to the pixel counter value
  */
-void correct_pixcnt14(uint16_t *p_pixcnt14){
-  if (*p_pixcnt14 != 0)
-    *p_pixcnt14 = ~(*p_pixcnt14-1) & PIXCNT_MASK_14BITS;
+void correct_pixcnt14(uint16_t *p_image){
+  if (*p_image != 0)
+    *p_image = ~(*p_image-1) & PIXCNT_MASK_14BITS;
 }
 
 
@@ -55,12 +58,12 @@ void correct_pixcnt14(uint16_t *p_pixcnt14){
  *  mode due to the specific detector counting mode (downward).
  *
  *  Args:
- *  - uint16_t *p_imgdata14 : pointer to the decoded image buffer
+ *  - uint16_t *p_image : pointer to the decoded image buffer
  */
-void correct_image14(uint16_t *p_imgdata14, int imgsize){
+void correct_image14(uint16_t *p_image, int imgsize){
   int i = 0;
   for(i = 0; i<imgsize; i++)
-    correct_pixcnt14(p_imgdata14+i);
+    correct_pixcnt14(p_image+i);
 }
 
 
@@ -70,13 +73,13 @@ void correct_image14(uint16_t *p_imgdata14, int imgsize){
  *  i.e. DET_X * DET_Y
  *
  *  Args:
- *  - uint8_t *p_rawdata    : pointer to the raw data buffer
- *  - uint16_t *p_imgdata2  : pointer to the decoded single counter image buffer
- *  - int chip_index        : index of currently decoded chip (starting from 0),
- *                            it is used to calculate correct offsets for raw
- *                            and decoded images
+ *  - uint8_t *p_rawdata  : pointer to the raw data buffer
+ *  - uint16_t *p_image   : pointer to the decoded single counter image buffer
+ *  - int chip_index      : index of currently decoded chip (starting from 0),
+ *                          it is used to calculate correct offsets for raw
+ *                          and decoded images
  */
-void decode_onechip_pixcnt14(uint8_t *p_rawdata, uint16_t *p_imgdata14,
+void decode_onechip_pixcnt14(uint8_t *p_rawdata, uint16_t *p_image,
                              int chip_index){
   /*  const in pointers declaration is only to eliminate warning when
    *  trying to assign pointer to constant (pointer can change constant value)
@@ -111,7 +114,7 @@ void decode_onechip_pixcnt14(uint8_t *p_rawdata, uint16_t *p_imgdata14,
                    + (*row_idx)*DET_Y // row index
                    + chipdata_offset; // chip index
           // update destination counter value
-          update_pixcnt14(p_imgdata14+pixcnt, rawdata_bit, pixcnt_bit);
+          update_bit_pixcnt14(p_image+pixcnt, rawdata_bit, pixcnt_bit);
           col_idx++;
         } // sout_bit
         rawdata_cnt++;
@@ -127,17 +130,17 @@ void decode_onechip_pixcnt14(uint8_t *p_rawdata, uint16_t *p_imgdata14,
  *  image, i.e. DET_X * DET_Y.
  *
  *  Args:
- *  - uint8_t *p_rawdata    : pointer to the raw data buffer
- *  - uint16_t *p_imgdata14 : pointer to the decoded image buffer
+ *  - uint8_t *p_rawdata  : pointer to the raw data buffer
+ *  - uint16_t *p_image   : pointer to the decoded image buffer
  */
-void decode_image14(uint8_t *p_rawdata, uint16_t *p_imgdata14){
+void decode_image14(uint8_t *p_rawdata, uint16_t *p_image){
 
   // decode first chip data
-  decode_onechip_pixcnt14(p_rawdata, p_imgdata14, 0);
+  decode_onechip_pixcnt14(p_rawdata, p_image, CHIP_0);
   // decode second chip data
-  decode_onechip_pixcnt14(p_rawdata, p_imgdata14, 1);
+  decode_onechip_pixcnt14(p_rawdata, p_image, CHIP_1);
   // correct counter values due to downward pixel counting
-  correct_image14(p_imgdata14, DET_SIZE_PIX);
+  correct_image14(p_image, DET_SIZE_PIX);
 }
 
 
@@ -155,8 +158,9 @@ void decode_image14(uint8_t *p_rawdata, uint16_t *p_imgdata14){
  *                            and decoded images
  *  - int counter_index     : index of the currently decoded pixel counter
  */
-void decode_onechip_cntsel_pixcnt14(uint8_t *p_rawdata, uint16_t *p_imgdata14,
-                                    int chip_index, int counter_index){
+void decode_onechip_pixcnt14_imgsel(uint8_t *p_rawdata, uint16_t *p_image,
+                                    int chip_index, int img_rowlen,
+                                    int img_x0, int img_y0){
   /*  const in pointers declaration is only to eliminate warning when
    *  trying to assign pointer to constant (pointer can change constant value)
    */
@@ -171,8 +175,7 @@ void decode_onechip_cntsel_pixcnt14(uint8_t *p_rawdata, uint16_t *p_imgdata14,
 
   // calculate pointer addresses offsets for raw and decoded data
   int rawdata_offset = chip_index*CHIP_RAW_SIZE_14BITS;
-  int chipdata_offset = chip_index*CHIP_X;
-  int img_offset = counter_index*DET_X;
+  int image_offset = img_y0*img_rowlen + img_x0 + chip_index*CHIP_X;
 
   // first half number of Bytes is for the first chip
   row_idx = &row_order[0];
@@ -187,13 +190,10 @@ void decode_onechip_cntsel_pixcnt14(uint8_t *p_rawdata, uint16_t *p_imgdata14,
           // isolate single bit in the current rawdata Byte
           rawdata_bit = *(p_rawdata+rawdata_cnt+rawdata_offset) & (1<<sout_bit);
           // get correct pixel counter position
-          pixcnt = *col_idx                         // column index
-                   + (*row_idx)*DET_X*2             // row index
-                   + chipdata_offset                // chip index
-                   + img_offset;                    // image counter (pix cnt)
+          pixcnt = image_offset + (*row_idx)*img_rowlen + *col_idx;
 
           // update destination counter value
-          update_pixcnt14(p_imgdata14+pixcnt, rawdata_bit, pixcnt_bit);
+          update_bit_pixcnt14(p_image+pixcnt, rawdata_bit, pixcnt_bit);
           col_idx++;
         } // sout_bit
         rawdata_cnt++;
@@ -211,21 +211,67 @@ void decode_onechip_cntsel_pixcnt14(uint8_t *p_rawdata, uint16_t *p_imgdata14,
  *  Args:
  *  - uint8_t *p_rawdata_low  : pointer to the lower counter raw data buffer
  *  - uint8_t *p_rawdata_high : pointer to the higher counter raw data buffer
- *  - uint16_t *p_imgdata14   : pointer to the decoded image buffer
+ *  - uint16_t *p_imgdata     : pointer to the decoded image buffer
  */
 void decode_image14_twocnts(uint8_t *p_rawdata_low, uint8_t *p_rawdata_high,
-                            uint16_t *p_imgdata14){
+                            uint16_t *p_imgdata){
 
-  // low counter data
-  // chip 1
-  decode_onechip_cntsel_pixcnt14(p_rawdata_low, p_imgdata14, 0, 0);
-  // chip 2
-  decode_onechip_cntsel_pixcnt14(p_rawdata_low, p_imgdata14, 1, 0);
-  // high counter data
-  // chip 1
-  decode_onechip_cntsel_pixcnt14(p_rawdata_high, p_imgdata14, 0, 1);
-  // chip 2
-  decode_onechip_cntsel_pixcnt14(p_rawdata_high, p_imgdata14, 1, 1);
+  int row_len = 2*DET_X;
+
+  // chip 1, low counter
+  decode_onechip_pixcnt14_imgsel(p_rawdata_low, p_imgdata, CHIP_0,
+                                 row_len, 0, 0);
+  // chip 2, low counter
+  decode_onechip_pixcnt14_imgsel(p_rawdata_low, p_imgdata, CHIP_1,
+                                 row_len, 0, 0);
+  // chip 1, high counter
+  decode_onechip_pixcnt14_imgsel(p_rawdata_high, p_imgdata, CHIP_0,
+                                 row_len, 256, 0);
+  // chip 2, high counter
+  decode_onechip_pixcnt14_imgsel(p_rawdata_high, p_imgdata, CHIP_1,
+                                 row_len, 256, 0);
+
   // correct counter values due to downward pixel counting
-  correct_image14(p_imgdata14, 2*DET_SIZE_PIX);
+  correct_image14(p_imgdata, 2*DET_SIZE_PIX);
+}
+
+
+/*  Function to correct the inter-chips gaps.
+ *  The inter-chips gap is the distance between two adjacent readout chips
+ *  that is covered by larger pixel sensor.
+ *  The inter-chips gap correction is based on redistribution of the total
+ *  count of two pixels into three pixels. The middle pixel is so called
+ *  the virtual pixel.
+ *  Original image:  ... | pix 126 |    pix 127   |    pix 128   | pix 129 | ...
+ *  Corrected image: ... | cor 126 | cor 127 | virtual | cor 128 | cor 129 | ...
+ *    cor 126 = pix 126
+ *    cor 127 = 2/3 pix 127
+ *    virtual = 1/3 pix 127 + 1/3 pix 128
+ *    cor 128 = 2/3 pix 128
+ *    cor 129 = pix 129
+ *
+ *  Args:
+ *  - uint16_t *p_image       : pointer to the horizontal/raw image
+ *  - uint16_t *p_corr_image  : pointer to the corrected image
+ *  - int imgsize_x           : horizontal (row) size of the input/raw image
+ *  - int imgsize_y           : vertical (col) size of the input/raw image
+ */
+//void geomcorr_image14(uint16_t *p_image, uint16_t *p_corr_image,
+//                      int imgsize_x, int imgsize_y){
+void geomcorr_image14(int imgsize_x, int imgsize_y){
+  int i = 0;
+  int j = 0;
+  int virt_col = CHIP_X;
+
+  printf("indexes:\n");
+  for(i=0; i<imgsize_x; i++){
+    if(i==virt_col){
+      printf("%d\n", i);
+    }
+    else if(i==virt_col+1){
+      printf("%d\n", i);
+      virt_col += DET_X;
+    }
+  }
+
 }

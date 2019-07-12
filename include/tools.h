@@ -12,13 +12,14 @@ extern "C"
 
 double time_diff(clock_t time_start, clock_t time_stop);
 void list_dir(char *dirpath);
-int count_file_values(char *filepath);
-int count_file_lines(char *filepath);
-void rawdata_to_memory(char *filepath, uint8_t *p_rawbuffer);
-void scan_rawdata_file(char *rawfile, char *rawdir, int *p_acqmode, int *p_nbimages, int *p_rawsize);
-void add_image(uint16_t *result, uint8_t *image2b, int nb_values);
-void save_image(char *filepath, uint16_t *p_imgbuffer);
-void save_image_twocnts(char *filepath, uint16_t *p_imgbuffer);
+int file_count_values(char *filepath);
+int file_count_lines(char *filepath);
+void scan_rawdata_file(char *rawfile, char *rawdir, int *p_acqmode,
+                       int *p_nbimages, int *p_rawsize);
+void rawdata_to_memory(char *filepath, uint8_t **p_rawbuffer, int line_len);
+void save_image16(char *filepath, uint16_t *p_image, int nb_rows, int nb_lines);
+void save_image32(char *filepath, uint32_t *p_image, int nb_rows, int nb_lines);
+
 #ifdef __cplusplus
 }
 #endif // __cplusplus

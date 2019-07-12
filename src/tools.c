@@ -15,13 +15,14 @@
 
 #include "../include/constants.h"
 
-/* Function to return time difference in ms
+/* Function to calculate the time difference between two timestamps in ms
  */
 double time_diff(clock_t time_start, clock_t time_stop){
   return (double)(time_stop - time_start)*1000/CLOCKS_PER_SEC;
 }
 
-/* Function to check the folder and to get number of files.
+
+/* Function to check the folder path and print all files in the folder.
  */
 void list_dir(char *dirpath){
   DIR *dir;  // DIR type pointer
@@ -37,7 +38,8 @@ void list_dir(char *dirpath){
     printf("%s:\n", dirpath);
     // First read is only to get number of files
     while((entry=readdir(dir)) != NULL){
-      if(entry->d_name[0] != '.'){  // ignore all files that starts with a dot
+      // ignore all files that starts with a dot
+      if(entry->d_name[0] != '.'){
         printf("  %s\n", entry->d_name);
         cnt++;
       }
@@ -50,7 +52,7 @@ void list_dir(char *dirpath){
 
 /* Function to get number of values in the data file.
  */
-int count_file_values(char *filepath){
+int file_count_values(char *filepath){
   FILE *p_file;
   int size = 0;
   int tmp = 0;
@@ -66,7 +68,7 @@ int count_file_values(char *filepath){
 
 /* Function to get number of lines a file.
  */
-int count_file_lines(char *filepath){
+int file_count_lines(char *filepath){
   FILE *p_file;
   int lines = 0;
   char c;
@@ -82,81 +84,93 @@ int count_file_lines(char *filepath){
 }
 
 
-/* Function to read raw data file and store it in the preallocated
- */
-void rawdata_to_memory(char *filepath, uint8_t *p_rawbuffer){
-  FILE *p_rawfile;
-  int tmp = 0;
-
-  p_rawfile = fopen(filepath, "r");
-
-  while(fscanf(p_rawfile, "%d", &tmp)==1){
-    *p_rawbuffer = (uint8_t)tmp;
-    p_rawbuffer++;
-  }
-  fclose(p_rawfile);
-}
-
-/*
- *  Function to read a raw file to extract acquisition parameters .
+/* Function to read a raw file to extract acquisition parameters .
  */
 void scan_rawdata_file(char *rawfile, char *rawdir, int *p_acqmode,
                        int *p_nbimages, int *p_rawsize){
   char fname[1024];
-  int imgsize;
+  int data_size;
+  clock_t t0, t1;
 
   // get the file path
   printf("-> Enter the file name: ");
   scanf("%s", fname);
 
+  t0 = clock();
   // build path
   sprintf(rawfile, "%s%s%s", rawdir, PATHSEP, fname);
   printf("\n");
-  printf("> Reading file:\n");
+  printf("> Scanning file:\n");
   printf(">  %s\n", rawfile);
 
   // analyze the raw file in order to extract acquisition parameters
-  *p_rawsize = count_file_values(rawfile);
-  *p_nbimages = count_file_lines(rawfile); // divide by two in order
-  imgsize = *p_rawsize/(*p_nbimages);
+  data_size = file_count_values(rawfile);
+  *p_nbimages = file_count_lines(rawfile); // divide by two in order
+  *p_rawsize = data_size/(*p_nbimages);
 
-  if(imgsize == RAW_SIZE_2BITS){
-    *p_acqmode = ACQMODE_2BITS;
-  }
-  else if(imgsize == RAW_SIZE_14BITS){
+  if(*p_rawsize == RAW_SIZE_14BITS){
     *p_acqmode = ACQMODE_14BITS;
+  }
+  else if(*p_rawsize == RAW_SIZE_2BITS){
+    *p_acqmode = ACQMODE_2BITS;
   }
   else{
     *p_acqmode = -1;
   }
+  t1 = clock();
   printf("\n");
-  printf("> Detected parameters:\n");
+  printf("> Detected acquisition parameters in %.1f ms\n", time_diff(t0, t1));
   printf(">  raw data size = %d Bytes\n", *p_rawsize);
   printf(">  acquisition mode = %d\n", *p_acqmode);
   printf(">  number of images = %d\n", *p_nbimages);
 }
 
 
-void add_image(uint16_t *result, uint8_t *image2b, int nb_values){
-  int i = 0;
+/* Function to read raw data file and store it in the allocated buffers
+ */
+void rawdata_to_memory(char *filepath, uint8_t **p_rawbuffer, int line_len){
+  FILE *p_rawfile;
+  int line_cnt = 0;
+  int cnt = 0;
+  int tmp = 0; // read value
+  uint8_t *addr; //current buffer address (current line/image)
 
-  for(i=0; i<nb_values; i++){
-    *(result+i) = *(result+i) + *(image2b+i);
+  // get first buffer address
+  addr = *(p_rawbuffer+line_cnt);
+
+  // open file
+  p_rawfile = fopen(filepath, "r");
+
+  //    printf("%d\n", line_cnt);
+  // scan values
+  while(fscanf(p_rawfile, "%d", &tmp)!=EOF){
+    *(addr+cnt) = (uint8_t)tmp;
+
+    if (cnt == line_len-1){
+      line_cnt++;
+      addr = *(p_rawbuffer+line_cnt);
+      cnt = 0;
+      //printf("%d\n", line_cnt);
+    }
+    else
+      cnt++;
   }
+  fclose(p_rawfile);
 }
 
 
-/*  Function to save decoded a 14 bits image to a text file
+/*  Function to save decoded 16-bits image to a text file
  */
-void save_image(char *filepath, uint16_t *p_imgbuffer){
+void save_image16(char *filepath, uint16_t *p_image, int nb_rows, int nb_lines){
   FILE *p_imgfile;
-  int i = 0;
-  int j = 0;
+  int row = 0;
+  int col = 0;
+
   p_imgfile = fopen(filepath, "w");
-  for(i=0; i<DET_Y; i++){
-    for(j=0; j<DET_X; j++){
-      fprintf(p_imgfile, "%d ", *p_imgbuffer);
-      p_imgbuffer++;
+  for(row=0; row<nb_rows; row++){
+    for(col=0; col<nb_lines; col++){
+      fprintf(p_imgfile, "%d ", *p_image);
+      p_image++;
     }
     fprintf(p_imgfile, "\n");
   }
@@ -165,18 +179,18 @@ void save_image(char *filepath, uint16_t *p_imgbuffer){
 }
 
 
-/*  Function to save decoded a 14 bits image to a text file
+/*  Function to save decoded 32-bits image to a text file
  */
-void save_image_twocnts(char *filepath, uint16_t *p_imgbuffer){
+void save_image32(char *filepath, uint32_t *p_image, int nb_rows, int nb_lines){
   FILE *p_imgfile;
-  int i = 0;
-  int j = 0;
+  int row = 0;
+  int col = 0;
 
   p_imgfile = fopen(filepath, "w");
-  for(i=0; i<DET_Y; i++){
-    for(j=0; j<2*DET_X; j++){
-      fprintf(p_imgfile, "%d ", *p_imgbuffer);
-      p_imgbuffer++;
+  for(row=0; row<nb_rows; row++){
+    for(col=0; col<nb_lines; col++){
+      fprintf(p_imgfile, "%d ", *p_image);
+      p_image++;
     }
     fprintf(p_imgfile, "\n");
   }

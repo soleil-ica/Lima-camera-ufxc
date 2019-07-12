@@ -26,7 +26,20 @@
 #define CHIP_SIZE_PIX         CHIP_X*CHIP_Y
 #define DET_X                 256
 #define DET_Y                 256
-#define DET_SIZE_PIX          CHIP_SIZE_PIX*CHIPS_N
+#define DET_SIZE_PIX          DET_X*DET_Y
+#define DET_X_CORR            257
+#define DET_Y_CORR            256
+#define DET_SIZE_PIX_CORR     DET_X_CORR*DET_Y_CORR
+
+// some constants for images decoding
+#define CHIP_0                0
+#define CHIP_1                1
+#define CNT_L                 0
+#define CNT_H                 1
+#define PROBE_0_CNT_L         0
+#define PROBE_0_CNT_H         1
+#define PROBE_1_CNT_L         2
+#define PROBE_1_CNT_H         3
 
 // detector readout parameters
 #define SOUT_LEN_BYTES        16 // number of Bytes for a single chip Sout line
