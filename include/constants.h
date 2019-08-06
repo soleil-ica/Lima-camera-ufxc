@@ -19,14 +19,16 @@
 #define CHIP_RAW_SIZE_14BITS  57344
 #define CHIP_RAW_SIZE_2BITS   8192
 
-// detector size
+// chip size
 #define CHIP_X                128
 #define CHIP_Y                256
 #define CHIPS_N               2
 #define CHIP_SIZE_PIX         CHIP_X*CHIP_Y
+// 2-chips detector image size
 #define DET_X                 256
 #define DET_Y                 256
 #define DET_SIZE_PIX          DET_X*DET_Y
+// 2 chips detector image size after inter-chips gap correction
 #define DET_X_CORR            257
 #define DET_Y_CORR            256
 #define DET_SIZE_PIX_CORR     DET_X_CORR*DET_Y_CORR
@@ -36,13 +38,14 @@
 #define CHIP_1                1
 #define CNT_L                 0
 #define CNT_H                 1
-#define PROBE_0_CNT_L         0
-#define PROBE_0_CNT_H         1
-#define PROBE_1_CNT_L         2
-#define PROBE_1_CNT_H         3
 
 // detector readout parameters
-#define SOUT_LEN_BYTES        16 // number of Bytes for a single chip Sout line
+#define SOUT_LEN_BYTES        16
 #define PIXCNT_MASK_14BITS    0x3FFF
+#define PIXCNT_MASK_2BITS     0x0003
+#define PIXCNT_14_MSB         13
+#define PIXCNT_14_LSB         0
+#define PIXCNT_2_MSB          1
+#define PIXCNT_2_LSB          0
 
 #endif // CONSTANTS_H_INCLUDED

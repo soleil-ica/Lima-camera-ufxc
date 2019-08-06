@@ -5,24 +5,20 @@
 extern "C"
 {
 #endif
-void update_bit_pixcnt2(uint8_t *p_pixcnt2, uint8_t rawbit, int bit_pos);
-void correct_pixcnt2(uint8_t *p_pixcnt2);
-void correct_image2(uint8_t *p_image, int imgsize);
-// functions to decode single counter data into separated images
-void decode_onechip_pixcnt2(uint8_t *p_rawdata, uint8_t *p_image,
-                            int chip_index);
-void decode_image2(uint8_t *p_rawdata, uint8_t *p_image);
-// functions to decode two counter data (low and high) into single image
-void decode_onechip_pixcnt2_imgsel(uint8_t *p_rawdata, uint8_t *p_image,
-                                   int chip_index, int img_rowlen,
-                                   int img_x0, int img_y0);
-void decode_image2_twocnts(uint8_t *p_rawdata_low, uint8_t *p_rawdata_high,
-                           uint8_t *p_image);
-// functions to decode counter data following the pump and probe scheme
-void sum_image2_pumpprobe(uint32_t *p_sum_image, uint8_t *p_image,
-                          int nb_values);
+
+void decode_chip_pixcnt2(uint8_t *p_rawdata, uint16_t *p_image, int chip_index,
+                         int img_x0, int img_y0, int size_x);
+void correct_value_image2(uint8_t *p_image, int image_size);
+void accumulate_image2(uint32_t *p_accumulated_image, uint8_t *p_image,
+                       int image_size);
+void correct_gaps_image2_acc(uint32_t *p_image, uint32_t *p_corrected_image,
+                             int *gaps_cols, int gaps_nb, int size_x, int size_y);
+void decode_image2_onecnt(uint8_t *p_rawdata, uint8_t *p_image);
+void decode_image2_twocnt(uint8_t *p_rawdata_low, uint8_t *p_rawdata_high,
+                          uint8_t *p_image);
 void decode_image2_pumpprobe(uint8_t **p_rawdata, uint32_t *p_image,
-                             int nb_images, int geomcorr_enable);
+                             int images_nb, int gap_correction);
+
 #ifdef __cplusplus
 }
 #endif // __cplusplus

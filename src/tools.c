@@ -15,14 +15,26 @@
 
 #include "../include/constants.h"
 
-/* Function to calculate the time difference between two timestamps in ms
+/*
+ * Function to calculate the time difference between two timestamps in ms
+ *
+ * Parameters:
+ * - clock_t time_start : start timestamps
+ * - clock_t time_stop  : stop timestamps
+ *
+ * Returns:
+ * - time difference in milliseconds
  */
 double time_diff(clock_t time_start, clock_t time_stop){
   return (double)(time_stop - time_start)*1000/CLOCKS_PER_SEC;
 }
 
 
-/* Function to check the folder path and print all files in the folder.
+/*
+ * Function to check the folder path and print all files in the folder.
+ *
+ * Parameters:
+ * - char *dirpath : folder path
  */
 void list_dir(char *dirpath){
   DIR *dir;  // DIR type pointer
@@ -50,7 +62,14 @@ void list_dir(char *dirpath){
 }
 
 
-/* Function to get number of values in the data file.
+/*
+ * Function to get number of numerical values in the data file.
+ *
+ * Parameters:
+ * - char *filepath : path to the data file
+ *
+ * Returns:
+ * - number of numerical values
  */
 int file_count_values(char *filepath){
   FILE *p_file;
@@ -66,7 +85,15 @@ int file_count_values(char *filepath){
   return size;
 }
 
-/* Function to get number of lines a file.
+
+/*
+ * Function to get number of lines a file.
+ *
+ * Parameters:
+ * - char *filepath : path to the data file
+ *
+ * Returns:
+ * - number of lines in the data file
  */
 int file_count_lines(char *filepath){
   FILE *p_file;
@@ -84,10 +111,20 @@ int file_count_lines(char *filepath){
 }
 
 
-/* Function to read a raw file to extract acquisition parameters .
+/*
+ * Function to read extract acquisition parameters from the raw data file.
+ * The extraction of the main parameters is based on the data size, line length
+ * and number of lines.
+ *
+ * Parameters:
+ * - char *rawfile    : name of the raw data file
+ * - char *rawdir     : path to the folder with the raw data file
+ * - int *p_acqmode   : extracted acquisition mode
+ * - int *p_images_nb : extracted number of images
+ * - int *p_rawsize   : extracted raw data size
  */
 void scan_rawdata_file(char *rawfile, char *rawdir, int *p_acqmode,
-                       int *p_nbimages, int *p_rawsize){
+                       int *p_images_nb, int *p_rawsize){
   char fname[1024];
   int data_size;
   clock_t t0, t1;
@@ -105,8 +142,8 @@ void scan_rawdata_file(char *rawfile, char *rawdir, int *p_acqmode,
 
   // analyze the raw file in order to extract acquisition parameters
   data_size = file_count_values(rawfile);
-  *p_nbimages = file_count_lines(rawfile); // divide by two in order
-  *p_rawsize = data_size/(*p_nbimages);
+  *p_images_nb = file_count_lines(rawfile); // divide by two in order
+  *p_rawsize = data_size/(*p_images_nb);
 
   if(*p_rawsize == RAW_SIZE_14BITS){
     *p_acqmode = ACQMODE_14BITS;
@@ -122,11 +159,18 @@ void scan_rawdata_file(char *rawfile, char *rawdir, int *p_acqmode,
   printf("> Detected acquisition parameters in %.1f ms\n", time_diff(t0, t1));
   printf(">  raw data size = %d Bytes\n", *p_rawsize);
   printf(">  acquisition mode = %d\n", *p_acqmode);
-  printf(">  number of images = %d\n", *p_nbimages);
+  printf(">  number of images = %d\n", *p_images_nb);
 }
 
 
-/* Function to read raw data file and store it in the allocated buffers
+/*
+ * Function to read raw data file and store it in the allocated buffers.
+ * Every line from the raw data file will be stored in a separated buffer.
+ *
+ * Parameters:
+ * - char *filepath        : path to the raw data file
+ * - uint8_t **p_rawbuffer : pointers to the allocated buffers
+ * - int line_len          : line length of the raw data file
  */
 void rawdata_to_memory(char *filepath, uint8_t **p_rawbuffer, int line_len){
   FILE *p_rawfile;
@@ -159,16 +203,23 @@ void rawdata_to_memory(char *filepath, uint8_t **p_rawbuffer, int line_len){
 }
 
 
-/*  Function to save decoded 16-bits image to a text file
+/*
+ * Function to save decoded 16-bits image to a text file.
+ *
+ * Parameters:
+ * - char *filepath    : path to the output text file
+ * - uint16_t *p_image : image data buffer
+ * - int size_x        : length of the line in the output file
+ * - int size_y        : number of lines in the output file
  */
-void save_image16(char *filepath, uint16_t *p_image, int nb_rows, int nb_lines){
+void save_image16(char *filepath, uint16_t *p_image, int size_x, int size_y){
   FILE *p_imgfile;
   int row = 0;
   int col = 0;
 
   p_imgfile = fopen(filepath, "w");
-  for(row=0; row<nb_rows; row++){
-    for(col=0; col<nb_lines; col++){
+  for(row=0; row<size_y; row++){
+    for(col=0; col<size_x; col++){
       fprintf(p_imgfile, "%d ", *p_image);
       p_image++;
     }
@@ -179,16 +230,23 @@ void save_image16(char *filepath, uint16_t *p_image, int nb_rows, int nb_lines){
 }
 
 
-/*  Function to save decoded 32-bits image to a text file
+/*
+ * Function to save decoded 16-bits image to a text file.
+ *
+ * Parameters:
+ * - char *filepath    : path to the output text file
+ * - uint32_t *p_image : image data buffer
+ * - int size_x        : length of the line in the output file
+ * - int size_y        : number of lines in the output file
  */
-void save_image32(char *filepath, uint32_t *p_image, int nb_rows, int nb_lines){
+void save_image32(char *filepath, uint32_t *p_image, int size_x, int size_y){
   FILE *p_imgfile;
   int row = 0;
   int col = 0;
 
   p_imgfile = fopen(filepath, "w");
-  for(row=0; row<nb_rows; row++){
-    for(col=0; col<nb_lines; col++){
+  for(row=0; row<size_y; row++){
+    for(col=0; col<size_x; col++){
       fprintf(p_imgfile, "%d ", *p_image);
       p_image++;
     }

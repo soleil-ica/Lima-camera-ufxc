@@ -464,7 +464,7 @@ void Camera::readFrame(void)
 			unsigned nb_bytes = 2;//always 16 bits, no sum is available in this mode
 			memset(bptr, 0, width * height*nb_bytes);
 				
-			decode_image14_twocnts((uint8_t*) imgBuffer[i * 2], (uint8_t*) imgBuffer[i * 2 + 1], (uint16_t*) bptr);
+			decode_image14_twocnt((uint8_t*) imgBuffer[i * 2], (uint8_t*) imgBuffer[i * 2 + 1], (uint16_t*) bptr, m_is_geometrical_correction_enabled);
 
 			Timestamp t1_decoding_image = Timestamp::now();
 			delta_time_all_decoding_image += (t1_decoding_image - t0_decoding_image);
