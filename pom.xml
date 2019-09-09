@@ -9,7 +9,7 @@
 
     <groupId>fr.soleil.lib.Lima.Camera</groupId>
     <artifactId>LimaUfxc-${aol}-shared-${mode}</artifactId>
-    <version>1.0.0</version>
+    <version>1.1.0</version>
 
     <packaging>nar</packaging>
     <name>LimaUfxc</name>
@@ -41,25 +41,37 @@
                        
                         <includePaths>
                             <includePath>include</includePath>
-							<includePath>/home/informatique/ica/noureddine/DeviceSources/Lima/camera/ufxc/sdk/linux/include</includePath>
-                            <!--<includePath>/home/informatique/ica/noureddine/.m2/repository/fr/soleil/lib/UFXCLib-i386-Linux-gcc-shared-release/1.0.1-SNAPSHOT/include</includePath>-->
+                            <!--<includePath>/home/informatique/ica/noureddine/DeviceSources/Lima/camera/ufxc/sdk/linux/include</includePath>-->                            
+                            <includePath>sdk/linux/include</includePath>                            
                         </includePaths>
                         
                         <!-- define less verbose mode for gcc-->
                         <options>
                             <option>-w</option>
+                            <option>-fopenmp</option>
                         </options>
+                        <defines>
+                            <define>USE_DECODE_IMAGE</define>
+                            <!--<define>USE_WRITE_FILE</define>-->
+                        </defines>
                     </cpp>
                                           
-                   <linker>
+                    <linker>
                         <libs>
                             
                             <lib>
-                                <name>UFXCLib-i386-Linux-gcc-shared-release-1.0.1-SNAPSHOT</name>
+                                <!-- UFXC -->
+                                <name>UFXCLib-i386-Linux-gcc-shared-release-1.0.1</name>
                                 <type>shared</type>
-                                <directory>/home/informatique/ica/noureddine/DeviceSources/Lima/camera/ufxc/sdk/linux/lib</directory>
-                                <!--<directory>/home/informatique/ica/noureddine/.m2/repository/fr/soleil/lib/UFXCLib-i386-Linux-gcc-shared-release/1.0.1-SNAPSHOT/lib/i386-Linux-g++/shared</directory>-->
+                                <directory>sdk/linux/lib</directory>                                
                             </lib>
+                            
+                            <lib>
+                                <!-- openMP -->
+                                <name>gomp</name>
+                                <type>shared</type>
+                                <directory>/usr/lib</directory>
+                            </lib>                            
                         </libs>
                     </linker>
                     					
@@ -99,3 +111,4 @@
     </developers>
 
 </project>
+

@@ -122,7 +122,7 @@ void Interface::stopAcq()
 //-----------------------------------------------------
 void Interface::getStatus(StatusType& status)
 {
-
+	DEB_MEMBER_FUNCT();
 	Camera::Status camera_status = Camera::Ready;
 	m_cam.getStatus(camera_status);
 
@@ -144,6 +144,7 @@ void Interface::getStatus(StatusType& status)
 			break;
 		case Camera::Fault:
 			status.set(HwInterface::StatusType::Fault);
+			break;
 	}
 }
 
