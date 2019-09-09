@@ -41,6 +41,7 @@
 #include "constants.h"
 #include "decode14b.h"
 #include "decode2b.h"
+#include "omp.h"
 #include "tools.h"
 
 using namespace lima;
@@ -307,7 +308,6 @@ void Camera::readFrame(void)
 	DEB_TRACE() << "IMAGE_DATA_SIZE = " << IMAGE_DATA_SIZE;
 	
 	//allocate memory
-	Timestamp t0_allocate = Timestamp::now();
 	uint8_t** imgBuffer;
 	int nb_frames = (m_depth == 14 ? m_nb_frames : m_pump_probe_nb_frames);
 
@@ -322,10 +322,6 @@ void Camera::readFrame(void)
 		DEB_ERROR() << "Allocation failed: " << e.what();
 		THROW_HW_ERROR(Error) << e.what();
 	}
-	
-	Timestamp t1_allocate = Timestamp::now();
-	double delta_time_allocate = t1_allocate - t0_allocate;
-	DEB_TRACE() << "---- Elapsed time of allocation memory = " << (int) (delta_time_allocate * 1000) << " (ms)";
 
 	DEB_TRACE() << "nb. frames (requested) = " << nb_frames;
 
@@ -342,9 +338,9 @@ void Camera::readFrame(void)
 	DEB_TRACE() << "---- Elapsed time of get_all_images() = " << (int) (delta_time_get_all_images * 1000) << " (ms)";
 
 	DEB_TRACE() << "nb. frames (received) = " << received_images_number;
-
-	double delta_time_all_new_frame_ready = 0;
+	
 #ifdef USE_WRITE_FILE 
+	double delta_time_all_new_frame_ready = 0;
 	Timestamp t0_write_file = Timestamp::now();
 	std::stringstream filename("");
 	std::ofstream output_file;
@@ -405,71 +401,63 @@ void Camera::readFrame(void)
 #endif
 
 #ifdef USE_DECODE_IMAGE 
-	double delta_time_all_decoding_image = 0;
-
+	double timer_all_decoding_image_omp = 0;
+	double delta_time_all_decoding_image_omp = 0;
 	if(m_depth == 2)
 	{
+		unsigned width 	= (m_is_geometrical_correction_enabled?512+2:512);
+		unsigned height = (m_is_stack_frames_sum_enabled?512:256);
+		unsigned nb_bytes = (m_is_stack_frames_sum_enabled?4:1);//32bits if frames summed, 8 bits otherwise
 		int nb_loop = (m_is_stack_frames_sum_enabled?1:received_images_number);
+		start_timer_omp(&timer_all_decoding_image_omp);
 		for(int i = 0;i < nb_loop;i++)
 		{
 			//Prepare Lima Frame Ptr 
 			//DEB_TRACE() << "Prepare  Lima Frame Ptr("<<i<<")";			
 			bptr = buffer_mgr.getFrameBufferPtr(i);
 
-			Timestamp t0_decoding_image = Timestamp::now();
-			DEB_TRACE() << "decoding 2 bits image...";
-			unsigned width 	= (m_is_geometrical_correction_enabled?512+2:512);
-			unsigned height = (m_is_stack_frames_sum_enabled?512:256);
-			unsigned nb_bytes = (m_is_stack_frames_sum_enabled?4:1);//32bits if frames summed, 8 bits otherwise
+			//display this once
+			if(i == 0)
+				if(m_is_stack_frames_sum_enabled)
+					DEB_TRACE() << "decoding of 2 bits images & make the sum of "<<received_images_number<<" frames ...";
+				else
+					DEB_TRACE() << "decoding of 2 bits image ...";
 
-			memset(bptr, 0, width * height * nb_bytes);
+			memset(bptr, 0, width * height * nb_bytes);			
 
 			if(m_is_stack_frames_sum_enabled)				
 				decode_image2_pumpprobe((uint8_t**)imgBuffer, (uint32_t*)bptr, received_images_number, m_is_geometrical_correction_enabled);				
 			else
 				THROW_HW_ERROR(Error) << "This decoding mode is not yet implemented !";//decode_image2_twocnts((uint8_t*)imgBuffer[i*2], (uint8_t*)imgBuffer[i*2+1], (uint8_t*)bptr);
 			
-			Timestamp t1_decoding_image = Timestamp::now();
-			delta_time_all_decoding_image += (t1_decoding_image - t0_decoding_image);
-
-			Timestamp t0_new_frame_ready = Timestamp::now();
-
 			//Push the image buffer through Lima 
 			//DEB_TRACE() << "Declare a Lima new Frame Ready (" << m_acq_frame_nb << ")";
 			HwFrameInfoType frame_info;
 			frame_info.acq_frame_nb = m_acq_frame_nb;
 			buffer_mgr.newFrameReady(frame_info);
 			m_acq_frame_nb++;
-
-			Timestamp t1_new_frame_ready = Timestamp::now();
-			delta_time_all_new_frame_ready += (t1_new_frame_ready - t0_new_frame_ready);
 		}
-		DEB_TRACE() << "---- Elapsed time of all decoding images = " << (int) (delta_time_all_decoding_image * 1000) << " (ms)";
-		DEB_TRACE() << "---- Elapsed time of all newFrameReady = " << (int) (delta_time_all_new_frame_ready * 1000) << " (ms)";
+		delta_time_all_decoding_image_omp = stop_timer_omp(&timer_all_decoding_image_omp);
+		DEB_TRACE() << "---- Elapsed time of all decoding images = " << (int) (delta_time_all_decoding_image_omp ) << " (ms)";
 	}
 	else //(m_depth == 14)
 	{
+		unsigned width 	= (m_is_geometrical_correction_enabled?512+2:512);
+		unsigned height 	= 256;	
+		unsigned nb_bytes = 2;//always 16 bits, no sum is available in this mode
+		start_timer_omp(&timer_all_decoding_image_omp);
 		for(int i = 0;i < received_images_number;i++)
 		{
 			//Prepare Lima Frame Ptr 
 			//DEB_TRACE() << "Prepare  Lima Frame Ptr("<<i<<")";			
 			bptr = buffer_mgr.getFrameBufferPtr(i);
 
-			Timestamp t0_decoding_image = Timestamp::now();
-
-			if(i == 0)//display this once
+			//display this once
+			if(i == 0)
 				DEB_TRACE() << "decoding 14 bits image...";
-			unsigned width 	= (m_is_geometrical_correction_enabled?512+2:512);
-			unsigned height 	= 256;	
-			unsigned nb_bytes = 2;//always 16 bits, no sum is available in this mode
-			memset(bptr, 0, width * height*nb_bytes);
-				
-			decode_image14_twocnt((uint8_t*) imgBuffer[i * 2], (uint8_t*) imgBuffer[i * 2 + 1], (uint16_t*) bptr, m_is_geometrical_correction_enabled);
 
-			Timestamp t1_decoding_image = Timestamp::now();
-			delta_time_all_decoding_image += (t1_decoding_image - t0_decoding_image);
-
-			Timestamp t0_new_frame_ready = Timestamp::now();
+			memset(bptr, 0, width * height*nb_bytes);			
+			decode_image14_twocnt((uint8_t*) imgBuffer[i * 2], (uint8_t*) imgBuffer[i * 2 + 1], (uint16_t*) bptr, m_is_geometrical_correction_enabled);		
 
 			//Push the image buffer through Lima 
 			//DEB_TRACE() << "Declare a Lima new Frame Ready (" << m_acq_frame_nb << ")";
@@ -477,13 +465,9 @@ void Camera::readFrame(void)
 			frame_info.acq_frame_nb = m_acq_frame_nb;
 			buffer_mgr.newFrameReady(frame_info);
 			m_acq_frame_nb++;
-
-			Timestamp t1_new_frame_ready = Timestamp::now();
-			delta_time_all_new_frame_ready += (t1_new_frame_ready - t0_new_frame_ready);
 		}
-		DEB_TRACE() <<
- "---- Elapsed time of all decoding images = " << (int) (delta_time_all_decoding_image * 1000) << " (ms)";
-		DEB_TRACE() << "---- Elapsed time of all newFrameReady = " << (int) (delta_time_all_new_frame_ready * 1000) << " (ms)";
+		delta_time_all_decoding_image_omp = stop_timer_omp(&timer_all_decoding_image_omp);	
+		DEB_TRACE() << "---- Elapsed time of all decoding images = " << (int) (delta_time_all_decoding_image_omp ) << " (ms)";
 	}
 #endif 
 
@@ -500,8 +484,6 @@ void Camera::readFrame(void)
 
 	Timestamp t1_deallocate = Timestamp::now();
 	double delta_time_deallocate = t1_deallocate - t0_deallocate;
-	DEB_TRACE() << "---- Elapsed time of deallocation memory = " << (int) (delta_time_deallocate * 1000) << " (ms)";
-
 	//@END	
 	m_status = Camera::Busy;
 }
