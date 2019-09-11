@@ -412,23 +412,23 @@ void decode_image2_pumpprobe (uint8_t **p_rawdata,
   img_n = images_nb/4;
 
   // parallel region begin
-  #pragma omp parallel
+  #pragma omp parallel private(p_tmpimg)
   {
     // allocate temporary image buffer for every thread
-    p_tmpimg = calloc(sizeof(uint32_t), img_size);
+    p_tmpimg = calloc(img_size, sizeof(uint32_t));
 
     #pragma omp for //schedule(runtime)
     for (i=0; i<img_n; i++)
       {
         // decode 4 images into 1 composite image
         // image 1 (2 chips)
-        decode_and_accumulate_pixcnt2 (*(p_rawdata+i),
+        decode_and_accumulate_pixcnt2 (*(p_rawdata + i*4),
                                         p_tmpimg,
                                         CHIP_0,
                                         img_x0[0],
                                         img_y0[0],
                                         img_width);
-        decode_and_accumulate_pixcnt2 (*(p_rawdata+i),
+        decode_and_accumulate_pixcnt2 (*(p_rawdata + i*4),
                                         p_tmpimg,
                                         CHIP_1,
                                         img_x0[1],
@@ -436,13 +436,13 @@ void decode_image2_pumpprobe (uint8_t **p_rawdata,
                                         img_width);
 
         // image 2 (2 chips)
-        decode_and_accumulate_pixcnt2 (*(p_rawdata+i+1),
+        decode_and_accumulate_pixcnt2 (*(p_rawdata + i*4 + 1),
                                         p_tmpimg,
                                         CHIP_0,
                                         img_x0[2],
                                         img_y0[2],
                                         img_width);
-        decode_and_accumulate_pixcnt2 (*(p_rawdata+i+1),
+        decode_and_accumulate_pixcnt2 (*(p_rawdata + i*4 + 1),
                                         p_tmpimg,
                                         CHIP_1,
                                         img_x0[3],
@@ -450,13 +450,13 @@ void decode_image2_pumpprobe (uint8_t **p_rawdata,
                                         img_width);
 
         // image 3 (2 chips)
-        decode_and_accumulate_pixcnt2 (*(p_rawdata+i+2),
+        decode_and_accumulate_pixcnt2 (*(p_rawdata + i*4 + 2),
                                         p_tmpimg,
                                         CHIP_0,
                                         img_x0[4],
                                         img_y0[4],
                                         img_width);
-        decode_and_accumulate_pixcnt2 (*(p_rawdata+i+2),
+        decode_and_accumulate_pixcnt2 (*(p_rawdata + i*4 + 2),
                                         p_tmpimg,
                                         CHIP_1,
                                         img_x0[5],
@@ -464,13 +464,13 @@ void decode_image2_pumpprobe (uint8_t **p_rawdata,
                                         img_width);
 
         // image 4 (2 chips)
-        decode_and_accumulate_pixcnt2 (*(p_rawdata+i+3),
+        decode_and_accumulate_pixcnt2 (*(p_rawdata + i*4 + 3),
                                         p_tmpimg,
                                         CHIP_0,
                                         img_x0[6],
                                         img_y0[6],
                                         img_width);
-        decode_and_accumulate_pixcnt2 (*(p_rawdata+i+3),
+        decode_and_accumulate_pixcnt2 (*(p_rawdata + i*4 + 3),
                                         p_tmpimg,
                                         CHIP_1,
                                         img_x0[7],
@@ -483,6 +483,8 @@ void decode_image2_pumpprobe (uint8_t **p_rawdata,
     {
       sum_images32(p_image, p_tmpimg, img_size);
     }
+
+    free(p_tmpimg);
   }
 
   // apply inter-chip gap correction

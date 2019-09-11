@@ -325,7 +325,9 @@ void Camera::readFrame(void)
 
 	DEB_TRACE() << "nb. frames (requested) = " << nb_frames;
 
-	Timestamp t0_get_all_images = Timestamp::now();
+	double timer_get_all_images_omp = 0;
+	double delta_timer_get_all_images_omp = 0;
+	start_timer_omp(&timer_get_all_images_omp);
 	////aLock.lock();
 	size_t frames_number = 0;
 	//get all images (two counters)
@@ -333,10 +335,8 @@ void Camera::readFrame(void)
 	//calculate the received images number for two counters
 	size_t received_images_number = frames_number / m_ufxc_interface->get_data_receiver_obj()->get_frame_number_for_2_counters(mode);
 	////aLock.unlock();
-	Timestamp t1_get_all_images = Timestamp::now();
-	double delta_time_get_all_images = t1_get_all_images - t0_get_all_images;
-	DEB_TRACE() << "---- Elapsed time of get_all_images() = " << (int) (delta_time_get_all_images * 1000) << " (ms)";
-
+	delta_timer_get_all_images_omp = stop_timer_omp(&timer_get_all_images_omp);	
+	DEB_TRACE() << "---- Elapsed time of get_all_images() = " << (int) (delta_timer_get_all_images_omp ) << " (ms)";
 	DEB_TRACE() << "nb. frames (received) = " << received_images_number;
 	
 #ifdef USE_WRITE_FILE 
@@ -396,20 +396,19 @@ void Camera::readFrame(void)
 
 	output_file.close();//generate 1 file for all images
 	DEB_TRACE() << "---- Elapsed time of all write file = " << (int) (delta_time_all_write_file * 1000) << " (ms)";
-
 	DEB_TRACE() << "---- Elapsed time of all newFrameReady = " << (int) (delta_time_all_new_frame_ready * 1000) << " (ms)";
 #endif
 
 #ifdef USE_DECODE_IMAGE 
-	double timer_all_decoding_image_omp = 0;
-	double delta_time_all_decoding_image_omp = 0;
+	double timer_all_decoding_images_omp = 0;
+	double delta_timer_all_decoding_images_omp = 0;
 	if(m_depth == 2)
 	{
 		unsigned width 	= (m_is_geometrical_correction_enabled?512+2:512);
 		unsigned height = (m_is_stack_frames_sum_enabled?512:256);
 		unsigned nb_bytes = (m_is_stack_frames_sum_enabled?4:1);//32bits if frames summed, 8 bits otherwise
 		int nb_loop = (m_is_stack_frames_sum_enabled?1:received_images_number);
-		start_timer_omp(&timer_all_decoding_image_omp);
+		start_timer_omp(&timer_all_decoding_images_omp);
 		for(int i = 0;i < nb_loop;i++)
 		{
 			//Prepare Lima Frame Ptr 
@@ -437,15 +436,15 @@ void Camera::readFrame(void)
 			buffer_mgr.newFrameReady(frame_info);
 			m_acq_frame_nb++;
 		}
-		delta_time_all_decoding_image_omp = stop_timer_omp(&timer_all_decoding_image_omp);
-		DEB_TRACE() << "---- Elapsed time of all decoding images = " << (int) (delta_time_all_decoding_image_omp ) << " (ms)";
+		delta_timer_all_decoding_images_omp = stop_timer_omp(&timer_all_decoding_images_omp);
+		DEB_TRACE() << "---- Elapsed time of all decoding images = " << (int) (delta_timer_all_decoding_images_omp ) << " (ms)";
 	}
 	else //(m_depth == 14)
 	{
 		unsigned width 	= (m_is_geometrical_correction_enabled?512+2:512);
 		unsigned height 	= 256;	
 		unsigned nb_bytes = 2;//always 16 bits, no sum is available in this mode
-		start_timer_omp(&timer_all_decoding_image_omp);
+		start_timer_omp(&timer_all_decoding_images_omp);
 		for(int i = 0;i < received_images_number;i++)
 		{
 			//Prepare Lima Frame Ptr 
@@ -466,12 +465,11 @@ void Camera::readFrame(void)
 			buffer_mgr.newFrameReady(frame_info);
 			m_acq_frame_nb++;
 		}
-		delta_time_all_decoding_image_omp = stop_timer_omp(&timer_all_decoding_image_omp);	
-		DEB_TRACE() << "---- Elapsed time of all decoding images = " << (int) (delta_time_all_decoding_image_omp ) << " (ms)";
+		delta_timer_all_decoding_images_omp = stop_timer_omp(&timer_all_decoding_images_omp);	
+		DEB_TRACE() << "---- Elapsed time of all decoding images = " << (int) (delta_timer_all_decoding_images_omp ) << " (ms)";
 	}
 #endif 
 
-	Timestamp t0_deallocate = Timestamp::now();
 	//free deallocate double pointer
 	if(imgBuffer)
 	{
@@ -482,8 +480,6 @@ void Camera::readFrame(void)
 		delete[] imgBuffer;
 	}
 
-	Timestamp t1_deallocate = Timestamp::now();
-	double delta_time_deallocate = t1_deallocate - t0_deallocate;
 	//@END	
 	m_status = Camera::Busy;
 }
