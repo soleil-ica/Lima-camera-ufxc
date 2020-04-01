@@ -61,10 +61,17 @@ public:
     virtual void stopAcq();
     virtual void getStatus(StatusType& status);
     virtual int getNbHwAcquiredFrames();
+
     //! get the camera object to access it directly from client
     Camera& getCamera()
     {
         return m_cam;
+    }
+
+    //! get the sync control object to access it directly from client
+    SyncCtrlObj& getSyncCtrl()
+    {
+        return m_sync;
     }
 
 private:

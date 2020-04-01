@@ -24,7 +24,6 @@
 #include <iostream>
 #include <string>
 #include <math.h>
-//#include <chrono>
 #include <climits>
 #include <iomanip>
 #include <signal.h>
@@ -38,69 +37,190 @@
 #include <ctime>
 #include <cstdint>
 
-#include "constants.h"
-#include "decode14b.h"
-#include "decode2b.h"
-#include "omp.h"
-#include "tools.h"
-
 using namespace lima;
 using namespace lima::Ufxc;
 using namespace std;
+using namespace ufxclib;
 
+//-------------------------------------------------------------------------
+// COUNTING MODES MANAGEMENT
+//-------------------------------------------------------------------------
+// labels of counting modes for reading the attribute
+static const std::vector<std::string> 
+       TANGO_COUNTING_MODE_READ_LABELS{"CONTINUOUS_2"       , 
+                                       "CONTINUOUS_4"       , 
+                                       "CONTINUOUS_8"       , 
+                                       "CONTINUOUS_14"      , 
+                                       "STANDARD_14"        ,
+                                       "LONG_COUNTER_28"    , 
+                                       "PUMP_PROBE_PROBE_32"};
 
-//---------------------------
+static const std::vector<enum lima::Ufxc::Camera::CountingModes> 
+        TANGO_COUNTING_MODE_READ_LABELS_TO_TYPE{lima::Ufxc::Camera::CountingModes::Continuous_2     ,
+                                                lima::Ufxc::Camera::CountingModes::Continuous_4     ,
+                                                lima::Ufxc::Camera::CountingModes::Continuous_8     ,
+                                                lima::Ufxc::Camera::CountingModes::Continuous_14    ,
+                                                lima::Ufxc::Camera::CountingModes::Standard_14      ,
+                                                lima::Ufxc::Camera::CountingModes::LongCounter_28   ,
+                                                lima::Ufxc::Camera::CountingModes::PumpProbeProbe_32};
+
+// labels of acquisition modes for writing the attribute
+static const std::vector<std::string> 
+       TANGO_COUNTING_MODE_WRITE_LABELS{"CONTINUOUS_2"       , "C2"  , 
+                                        "CONTINUOUS_4"       , "C4"  ,
+                                        "CONTINUOUS_8"       , "C8"  ,
+                                        "CONTINUOUS_14"      , "C14" ,
+                                        "STANDARD_14"        , "S14" ,
+                                        "LONG_COUNTER_28"    , "L28" , 
+                                        "PUMP_PROBE_PROBE_32", "P32" };
+
+static const std::vector<enum lima::Ufxc::Camera::CountingModes> TANGO_COUNTING_MODE_WRITE_LABELS_TO_TYPE
+    {lima::Ufxc::Camera::CountingModes::Continuous_2     , lima::Ufxc::Camera::CountingModes::Continuous_2     ,
+     lima::Ufxc::Camera::CountingModes::Continuous_4     , lima::Ufxc::Camera::CountingModes::Continuous_4     ,
+     lima::Ufxc::Camera::CountingModes::Continuous_8     , lima::Ufxc::Camera::CountingModes::Continuous_8     ,
+     lima::Ufxc::Camera::CountingModes::Continuous_14    , lima::Ufxc::Camera::CountingModes::Continuous_14    ,
+     lima::Ufxc::Camera::CountingModes::Standard_14      , lima::Ufxc::Camera::CountingModes::Standard_14      ,
+     lima::Ufxc::Camera::CountingModes::LongCounter_28   , lima::Ufxc::Camera::CountingModes::LongCounter_28   ,
+     lima::Ufxc::Camera::CountingModes::PumpProbeProbe_32, lima::Ufxc::Camera::CountingModes::PumpProbeProbe_32};
+
+//-----------------------------------------------------
+// convertCountingModeLabel
+//-----------------------------------------------------
+// Converts a counting mode label to the corresponding enum.
+// Changes also the label to the official label.
+// return false in case of error with a filled message in out_error_message
+bool Camera::convertCountingModeLabel(std::string & in_out_mode_label,
+                                      enum lima::Ufxc::Camera::CountingModes & out_counting_mode,
+                                      std::string & out_error_message)
+{
+    bool result = true;
+
+    // we need to convert the acquisition mode string to the enum acquisition mode
+    enum lima::Ufxc::Camera::CountingModes in_counting_mode;
+    const std::vector<string>::const_iterator 
+        iterator = find(TANGO_COUNTING_MODE_WRITE_LABELS.begin(), 
+                        TANGO_COUNTING_MODE_WRITE_LABELS.end  (),
+                        in_out_mode_label);
+    // found it
+    if (iterator != TANGO_COUNTING_MODE_WRITE_LABELS.end()) 
+    {
+        // calculation gives the index
+        out_counting_mode = TANGO_COUNTING_MODE_WRITE_LABELS_TO_TYPE[iterator - TANGO_COUNTING_MODE_WRITE_LABELS.begin()];
+        result = convertCountingModeEnum(out_counting_mode, in_out_mode_label, in_out_mode_label);
+    }
+    else
+    {
+        std::stringstream message;
+        message.str("");
+        message << "Incorrect counting mode: " << in_out_mode_label << std::endl;
+        message << "Available counting modes are:" << std::endl;
+
+        for(size_t index = 0 ; index < TANGO_COUNTING_MODE_READ_LABELS.size() ; index++)
+        {
+            message << TANGO_COUNTING_MODE_READ_LABELS[index] << std::endl;
+        }
+
+        out_error_message = message.str();
+        result = false;
+    }
+
+    return result;
+}
+
+//-----------------------------------------------------
+// convertCountingModeEnum
+//-----------------------------------------------------
+// Converts a counting mode enum to the corresponding label.
+// return false in case of error with a filled message in out_error_message
+bool Camera::convertCountingModeEnum(enum lima::Ufxc::Camera::CountingModes & in_counting_mode,
+                                     std::string & out_mode_label   ,
+                                     std::string & out_error_message)
+{
+    bool result = true;
+
+    // searching the label of the acquisition mode
+    const std::vector<enum lima::Ufxc::Camera::CountingModes>::const_iterator 
+        iterator = find(TANGO_COUNTING_MODE_READ_LABELS_TO_TYPE.begin(), 
+                        TANGO_COUNTING_MODE_READ_LABELS_TO_TYPE.end  (),
+                        in_counting_mode);
+    // found it
+    if (iterator != TANGO_COUNTING_MODE_READ_LABELS_TO_TYPE.end()) 
+    {
+        // calculation gives the index
+        out_mode_label = TANGO_COUNTING_MODE_READ_LABELS[iterator - TANGO_COUNTING_MODE_READ_LABELS_TO_TYPE.begin()];
+    }
+    else
+    {
+        std::ostringstream MsgErr;
+        MsgErr << "Impossible to found the counting mode: " << in_counting_mode << std::endl;
+        out_error_message = MsgErr.str();
+        result = false;
+    }
+
+    return result;
+}
+
+//-------------------------------------------------------------------------
 // @brief  Ctor
-//---------------------------
+//-------------------------------------------------------------------------
 /************************************************************************
  * \brief constructor
  ************************************************************************/
-Camera::Camera(	const std::string& TCP_ip_address, unsigned long TCP_port,
+Camera::Camera(	const std::string& TCP_ip_address , unsigned long TCP_port ,
 				const std::string& SFP1_ip_address, unsigned long SFP1_port,
 				const std::string& SFP2_ip_address, unsigned long SFP2_port,
 				const std::string& SFP3_ip_address, unsigned long SFP3_port,
-				unsigned long timeout_ms,
-				bool is_geometrical_correction_enabled,
-				bool is_stack_frames_sum_enabled)
+                unsigned long      SFP_MTU        ,
+                unsigned long      timeout_ms     ,
+                unsigned long      pixel_depth    ,
+                std::string        counting_mode  )
 {
 	DEB_CONSTRUCTOR();
 
-	m_detector_type = "undefined";
-	m_detector_model = "undefined";
-	m_detector_firmware_version = "undefined";
-	m_detector_software_version = "undefined";
-	m_module_firmware_version = "undefined";
-	m_depth = 14;
-	m_acq_frame_nb = 0;
-	m_nb_frames = 1;
-	m_pump_probe_trigger_acquisition_frequency = 1;
-	m_pump_probe_nb_frames = 1;		
-	m_is_geometrical_correction_enabled = is_geometrical_correction_enabled;		
-    m_is_stack_frames_sum_enabled = is_stack_frames_sum_enabled;    
-	DEB_TRACE()<<"m_is_geometrical_correction_enabled = "<<m_is_geometrical_correction_enabled;
-	DEB_TRACE()<<"m_is_stack_frames_sum_enabled = "<<m_is_stack_frames_sum_enabled;
 	try
 	{
+        setStatus(Camera::Init, true);
+
+        m_detector_type = "undefined";
+	    m_detector_model = "undefined";
+	    m_detector_firmware_version = "undefined";
+	    m_detector_software_version = "undefined";
+	    m_module_firmware_version = "undefined";
+	    m_depth = pixel_depth; // given by the lima factory
+	    m_acq_frame_nb = 0;
+	    m_nb_frames = 1;
+	    m_pump_probe_nb_frames = 1;
+	    m_is_geometrical_correction_enabled = false;		
+
+        // determine which counting mode should be used -> if unknown label -> CountingModes::SelectDefault
+        std::string error_message;
+
+        if(!convertCountingModeLabel(counting_mode, m_counting_mode, error_message))
+        {
+            m_counting_mode = CountingModes::SelectDefault;
+    	    DEB_ERROR() << error_message;
+        }
+
 		ufxclib::DaqCnxConfig TCP_cnx, SFP1_cnx, SFP2_cnx, SFP3_cnx;
-		TCP_cnx.ip_address = TCP_ip_address;
-		TCP_cnx.configuration_port = TCP_port;
-		TCP_cnx.socket_timeout_ms = timeout_ms;
-		TCP_cnx.protocol = ufxclib::EnumProtocol::TCP;
+		TCP_cnx.ip_address          = TCP_ip_address;
+		TCP_cnx.configuration_port  = TCP_port;
+		TCP_cnx.socket_timeout_ms   = timeout_ms;
+		TCP_cnx.protocol            = ufxclib::EnumProtocol::TCP;
 
-		SFP1_cnx.ip_address = SFP1_ip_address;
+		SFP1_cnx.ip_address         = SFP1_ip_address;
 		SFP1_cnx.configuration_port = SFP1_port;
-		SFP1_cnx.socket_timeout_ms = timeout_ms;
-		SFP1_cnx.protocol = ufxclib::EnumProtocol::UDP;
+		SFP1_cnx.socket_timeout_ms  = timeout_ms;
+		SFP1_cnx.protocol           = ufxclib::EnumProtocol::UDP;
 
-		SFP2_cnx.ip_address = SFP2_ip_address;
+		SFP2_cnx.ip_address         = SFP2_ip_address;
 		SFP2_cnx.configuration_port = SFP2_port;
-		SFP2_cnx.socket_timeout_ms = timeout_ms;
-		SFP2_cnx.protocol = ufxclib::EnumProtocol::UDP;
+		SFP2_cnx.socket_timeout_ms  = timeout_ms;
+		SFP2_cnx.protocol           = ufxclib::EnumProtocol::UDP;
 
-		SFP3_cnx.ip_address = SFP3_ip_address;
+		SFP3_cnx.ip_address         = SFP3_ip_address;
 		SFP3_cnx.configuration_port = SFP3_port;
-		SFP3_cnx.socket_timeout_ms = timeout_ms;
-		SFP3_cnx.protocol = ufxclib::EnumProtocol::UDP;
+		SFP3_cnx.socket_timeout_ms  = timeout_ms;
+		SFP3_cnx.protocol           = ufxclib::EnumProtocol::UDP;
 
 		//- prepare the registers
 		SetHardwareRegisters();
@@ -109,12 +229,22 @@ Camera::Camera(	const std::string& TCP_ip_address, unsigned long TCP_port,
 		m_ufxc_interface = new ufxclib::UFXCInterface();
 
 		//- connect to the DAQ/Detector
-		m_ufxc_interface->open_connection(TCP_cnx, SFP1_cnx, SFP2_cnx, SFP3_cnx);
+		m_ufxc_interface->open_connection(TCP_cnx, SFP1_cnx, SFP2_cnx, SFP3_cnx, SFP_MTU);
 
 		//- set the registers to the DAQ
-		m_ufxc_interface->get_config_acquisition_obj()->set_acquisition_registers_names(m_acquisition_registers);
-		m_ufxc_interface->get_config_detector_obj()->set_detector_registers_names(m_detector_registers);
-		m_ufxc_interface->get_daq_monitoring_obj()->set_monitoring_registers_names(m_monitor_registers);
+		m_ufxc_interface->set_acquisition_registers_names(m_acquisition_registers);
+		m_ufxc_interface->set_detector_registers_names   (m_detector_registers);
+		m_ufxc_interface->set_monitoring_registers_names (m_monitor_registers);
+        m_ufxc_interface->set_geometrical_correction(m_is_geometrical_correction_enabled);
+
+	    m_detector_type  = m_ufxc_interface->get_detector_name();
+	    m_detector_model = m_ufxc_interface->get_detector_type();
+
+        setCountingMode(m_counting_mode);
+
+        // at start, using the default trigger mode to set the counting mode
+        // the real trigger mode will be used when we start an acquisition by Lima
+        setTrigMode(getDefaultTrigMode());
 	}
 	catch(const ufxclib::Exception& ue)
 	{
@@ -147,6 +277,11 @@ Camera::~Camera()
 	DEB_DESTRUCTOR();
 
 	//delete the acquisition thread
+	if(m_thread_running == true)
+	{
+	    m_ufxc_interface->stop_acquisition();
+    }
+
 	delete m_acq_thread;
 
 	// releasing the detector control instance
@@ -159,9 +294,7 @@ Camera::~Camera()
 		delete m_ufxc_interface;
 		m_ufxc_interface = NULL;
 	}
-
 }
-
 
 //-----------------------------------------------------
 //
@@ -186,6 +319,8 @@ void Camera::prepareAcq()
 	if(m_nb_frames == 0LL)
 		THROW_HW_ERROR(ErrorType::Error) << "Start mode is not allowed for this device! Please use Snap mode.";
 
+    if((m_counting_mode == CountingModes::PumpProbeProbe_32)&&(m_nb_frames != 1LL))
+		THROW_HW_ERROR(Error) << "Incorrect number of frames in Pump Probe Probe mode! Should be set to 1.";
 	//@END	
 }
 
@@ -201,10 +336,13 @@ void Camera::startAcq()
 	buffer_mgr.setStartTimestamp(Timestamp::now());
 	DEB_TRACE() << "Ensure that Acquisition is Started  ";
 
-	setStatus(Camera::Busy, false);
+    // we need to force the busy state.
+    // if not critical error occured during the previous acquisition
+    // we are able to start another acqusition.
+	setStatus(Camera::Busy, true);
 
 	//@BEGIN : Ensure that Acquisition is Started before return ...
-	m_ufxc_interface->get_config_acquisition_obj()->start_acquisition();
+	m_ufxc_interface->start_acquisition();
 	//@END
 
 	//Start acquisition thread
@@ -214,25 +352,45 @@ void Camera::startAcq()
 }
 
 //-----------------------------------------------------
+// called only by the acquisition thread
+//-----------------------------------------------------
+void Camera::internalStopAcq()
+{
+	DEB_MEMBER_FUNCT();
+	AutoMutex aLock(m_cond.mutex());
+
+    //@BEGIN : Ensure that Acquisition is Stopped before return ...	
+    m_ufxc_interface->stop_acquisition();
+    //@END
+
+    m_wait_flag = true;
+	m_cond.broadcast();
+	DEB_TRACE() << "internal stop requested ";
+}
+
+//-----------------------------------------------------
 //
 //-----------------------------------------------------
 void Camera::stopAcq()
 {
 	DEB_MEMBER_FUNCT();
 	AutoMutex aLock(m_cond.mutex());
-	// Dont do anything if acquisition is idle.
-	if(m_thread_running == true)
-	{
-		m_wait_flag = true;
-		m_cond.broadcast();
-		DEB_TRACE() << "stop requested ";
-	}
 
-	//@BEGIN : Ensure that Acquisition is Stopped before return ...	
-	m_ufxc_interface->get_config_acquisition_obj()->stop_acquisition();
-	//@END
-	//now detector is ready
-	setStatus(Camera::Ready, false);
+    // Don't do anything if acquisition is idle.
+	if(m_thread_running)
+	{
+        // do not call internalStopAcq in this method because the lock is not a recursive one!
+        //@BEGIN : Ensure that Acquisition is Stopped before return ...	
+        m_ufxc_interface->stop_acquisition();
+        //@END
+
+        m_wait_flag = true;
+	    m_cond.broadcast();
+	    DEB_TRACE() << "stop requested ";
+
+        //now detector is ready
+	    setStatus(Camera::Ready, false);
+	}
 }
 
 //-----------------------------------------------------
@@ -242,35 +400,40 @@ void Camera::getStatus(Camera::Status& status)
 {
 	DEB_MEMBER_FUNCT();
 	AutoMutex aLock(m_cond.mutex());
-	ufxclib::EnumDetectorStatus det_status;
 
-	// getting the detector status
-	det_status = m_ufxc_interface->get_daq_monitoring_obj()->get_detector_status();
+    // managing the error state which could be forced by the acquisition thread
+    if(m_status != Camera::Fault)
+    {
+    	ufxclib::EnumDetectorStatus det_status;
 
-	switch(det_status)
-	{
-		case ufxclib::EnumDetectorStatus::E_DET_READY:
-			m_status = Camera::Ready;
-			//DEB_TRACE() << "E_DET_READY";
-			break;
-		case ufxclib::EnumDetectorStatus::E_DET_BUSY:
-			m_status = Camera::Busy;
-			//DEB_TRACE() << "E_DET_BUSY";
-			break;
-		case ufxclib::EnumDetectorStatus::E_DET_DELAY_SCANNING:
-		case ufxclib::EnumDetectorStatus::E_DET_CONFIGURING:
-			m_status = Camera::Configuring;
-			//DEB_TRACE() << "E_DET_CONFIGURING";
-			break;
-		case ufxclib::EnumDetectorStatus::E_DET_NOT_CONFIGURED:
-			m_status = Camera::Ready;
-			//DEB_TRACE() << "E_DET_NOT_CONFIGURED";
-			break;
-		case ufxclib::EnumDetectorStatus::E_DET_ERROR:
-			m_status = Camera::Fault;
-			DEB_TRACE() << "E_DET_ERROR";
-			break;
-	}
+        // getting the detector status
+	    det_status = m_ufxc_interface->get_detector_status();
+
+	    switch(det_status)
+	    {
+		    case ufxclib::EnumDetectorStatus::E_DET_READY:
+			    m_status = Camera::Ready;
+			    //DEB_TRACE() << "E_DET_READY";
+			    break;
+		    case ufxclib::EnumDetectorStatus::E_DET_BUSY:
+			    m_status = Camera::Busy;
+			    //DEB_TRACE() << "E_DET_BUSY";
+			    break;
+		    case ufxclib::EnumDetectorStatus::E_DET_DELAY_SCANNING:
+		    case ufxclib::EnumDetectorStatus::E_DET_CONFIGURING:
+			    m_status = Camera::Configuring;
+			    //DEB_TRACE() << "E_DET_CONFIGURING";
+			    break;
+		    case ufxclib::EnumDetectorStatus::E_DET_NOT_CONFIGURED:
+			    m_status = Camera::Ready;
+			    //DEB_TRACE() << "E_DET_NOT_CONFIGURED";
+			    break;
+		    case ufxclib::EnumDetectorStatus::E_DET_ERROR:
+			    m_status = Camera::Fault;
+			    DEB_TRACE() << "E_DET_ERROR";
+			    break;
+	    }
+    }
 
 	status = m_status;
 	aLock.unlock();
@@ -292,196 +455,90 @@ void Camera::setStatus(Camera::Status status, bool force)
 //-----------------------------------------------------
 //
 //-----------------------------------------------------
-void Camera::readFrame(void)
+bool Camera::readFrames(void)
 {
-	DEB_MEMBER_FUNCT();
-	DEB_TRACE() << "Camera::readFrame() ";
-	void* bptr;
-	StdBufferCbMgr& buffer_mgr = m_bufferCtrlObj.getBuffer();
-	//@BEGIN : 
-	//get Acquisitions images
-	DEB_TRACE() << "PACKET_DATA_LENGTH = " << PACKET_DATA_LENGTH;
-	AutoMutex aLock(m_cond.mutex());
-	ufxclib::EnumAcquisitionMode mode = m_ufxc_interface->get_config_acquisition_obj()->get_acq_mode();
-	size_t IMAGE_DATA_SIZE = (m_ufxc_interface->get_data_receiver_obj()->get_frame_number_for_2_counters(mode) / COUNTER_NUMBER) * PACKET_DATA_LENGTH;
-	aLock.unlock();
-	DEB_TRACE() << "IMAGE_DATA_SIZE = " << IMAGE_DATA_SIZE;
-	
-	//allocate memory
-	uint8_t** imgBuffer;
-	int nb_frames = (m_depth == 14 ? m_nb_frames : m_pump_probe_nb_frames);
+    DEB_MEMBER_FUNCT();
+	DEB_TRACE() << "Camera::readFrames() ";
 
-	try
-	{
-		imgBuffer = new uint8_t*[2 * nb_frames];
-		for(int i = 0;i < (2 * nb_frames);i++)
-			imgBuffer[i] = new uint8_t[IMAGE_DATA_SIZE];
-	}
-	catch(const std::bad_alloc& e)
-	{
-		DEB_ERROR() << "Allocation failed: " << e.what();
-		THROW_HW_ERROR(Error) << e.what();
-	}
+    double frame_time = m_ufxc_interface->get_counting_time_ms() + m_ufxc_interface->get_waiting_time_ms();
+    bool fast_acquisition = (frame_time < 100); // if the frame time is inferior of 100 ms, we need te treat the frames faster
 
-	DEB_TRACE() << "nb. frames (requested) = " << nb_frames;
+    // reading the Lima frame size in bytes
+	StdBufferCbMgr& buffer_mgr     = m_bufferCtrlObj.getBuffer();
+    lima::FrameDim  frame_dim      = buffer_mgr.getFrameDim();
+    int             frame_mem_size = frame_dim.getMemSize();
+    Size            frame_size     = frame_dim.getSize();
+    int             frame_depth    = frame_dim.getDepth();
+    bool            incoherent_frame_index = false; // will be set to true if there is at least one incoherent frame received (frame lost)
+    std::size_t     built_images_nb;
 
-	double timer_get_all_images_omp = 0;
-	double delta_timer_get_all_images_omp = 0;
-	start_timer_omp(&timer_get_all_images_omp);
-	////aLock.lock();
-	size_t frames_number = 0;
-	//get all images (two counters)
-	m_ufxc_interface->get_data_receiver_obj()->get_all_images((char**) imgBuffer, mode, nb_frames, frames_number);
-	//calculate the received images number for two counters
-	size_t received_images_number = frames_number / m_ufxc_interface->get_data_receiver_obj()->get_frame_number_for_2_counters(mode);
-	////aLock.unlock();
-	delta_timer_get_all_images_omp = stop_timer_omp(&timer_get_all_images_omp);	
-	DEB_TRACE() << "---- Elapsed time of get_all_images() = " << (int) (delta_timer_get_all_images_omp ) << " (ms)";
-	DEB_TRACE() << "nb. frames (received) = " << received_images_number;
-	
-#ifdef USE_WRITE_FILE 
-	double delta_time_all_new_frame_ready = 0;
-	Timestamp t0_write_file = Timestamp::now();
-	std::stringstream filename("");
-	std::ofstream output_file;
-	//generate 1 file for all images
-	time_t now = time(0);
-	struct tm tstruct;
-	char buf[80];
-	tstruct = *localtime(&now);
-	strftime(buf, sizeof(buf), "%Y-%m-%d-%X", &tstruct);
+	DEB_TRACE() << "Camera::readFrames() - starting acquisition - size (" 
+                << frame_size.getWidth () << ", " 
+                << frame_size.getHeight() << ") - depth (" 
+                << frame_depth << ")";
 
-	double delta_time_all_write_file = 0;
-	Timestamp t1_write_file = Timestamp::now();
-	filename.str("");
-	filename << "/dev/shm/ufxc/ufxc-data-" << buf << ".dat";
-	DEB_TRACE() << "filename = " << filename.str();
-	output_file.open(filename.str(), std::ios::out | std::ofstream::binary);
+    // register the plugin as an acquisition customer
+    m_ufxc_interface->register_acquisition_customer("Lima Ufxc Plugin");
 
-	for(int i = 0;i < (received_images_number * 2);i++)
-	{
-		if(i % 2 == 0)
-		{
-			//Prepare Lima Frame Ptr 
-			//DEB_TRACE() << "Prepare  Lima Frame Ptr("<<i/2<<")";			
-			bptr = buffer_mgr.getFrameBufferPtr(i / 2);
-		}
+    // read all the frames or until there is a stop/error
+    while(!m_ufxc_interface->end_of_transfer())
+    {
+        // waiting for new images to receive
+        m_ufxc_interface->waiting_built_images();
 
-		Timestamp t0_write_file = Timestamp::now();
-		for(int j = 0;j < IMAGE_DATA_SIZE;j++)
-		{
-			output_file << int((unsigned char) (imgBuffer[i][j])) << " ";
-		}
+        // getting the images
+        built_images_nb = m_ufxc_interface->get_built_images_nb();
 
-		//next line for the 2nd counter
-		output_file << std::endl;
+        while(built_images_nb)
+        {
+            std::size_t image_index = m_ufxc_interface->get_first_built_image_index();
 
-		Timestamp t1_write_file = Timestamp::now();
-		delta_time_all_write_file += (t1_write_file - t0_write_file);
+            if((!incoherent_frame_index)&&(image_index != m_acq_frame_nb))
+            {
+    	        DEB_ERROR() << "---- received frame index " << image_index << " is incoherent with the needed frame index " << m_acq_frame_nb;
+                incoherent_frame_index = true;
+            }
 
-		Timestamp t0_new_frame_ready = Timestamp::now();
-		if(i % 2 == 1)
-		{
-			//Push the image buffer through Lima 
-			//DEB_TRACE() << "Declare a Lima new Frame Ready (" << m_acq_frame_nb << ")";
-			HwFrameInfoType frame_info;
-			frame_info.acq_frame_nb = m_acq_frame_nb;
-			buffer_mgr.newFrameReady(frame_info);
-			m_acq_frame_nb++;
-		}
-		Timestamp t1_new_frame_ready = Timestamp::now();
-		delta_time_all_new_frame_ready += (t1_new_frame_ready - t0_new_frame_ready);
+	        // preparing Lima Frame Ptr 
+	        void * bptr = buffer_mgr.getFrameBufferPtr(m_acq_frame_nb);
 
-	}
+            if(!m_ufxc_interface->fill_image_buffer(reinterpret_cast<char *>(bptr), frame_mem_size))
+            {
+                // A problem occured, it is safer to stop the acquisition.
+                // We will exit from the loop.
+    	        DEB_ERROR() << "---- Error during fill image buffer of image " << m_acq_frame_nb;
+        	    m_ufxc_interface->stop_acquisition();
+            }
+            else
+            {
+		        // pushing the image buffer through Lima 
+		        HwFrameInfoType frame_info;
+		        frame_info.acq_frame_nb = m_acq_frame_nb;
+		        buffer_mgr.newFrameReady(frame_info);
+		        m_acq_frame_nb++;
+            }
 
-	output_file.close();//generate 1 file for all images
-	DEB_TRACE() << "---- Elapsed time of all write file = " << (int) (delta_time_all_write_file * 1000) << " (ms)";
-	DEB_TRACE() << "---- Elapsed time of all newFrameReady = " << (int) (delta_time_all_new_frame_ready * 1000) << " (ms)";
-#endif
+            built_images_nb--;
 
-#ifdef USE_DECODE_IMAGE 
-	double timer_all_decoding_images_omp = 0;
-	double delta_timer_all_decoding_images_omp = 0;
-	if(m_depth == 2)
-	{
-		unsigned width 	= (m_is_geometrical_correction_enabled?512+2:512);
-		unsigned height = (m_is_stack_frames_sum_enabled?512:256);
-		unsigned nb_bytes = (m_is_stack_frames_sum_enabled?4:1);//32bits if frames summed, 8 bits otherwise
-		int nb_loop = (m_is_stack_frames_sum_enabled?1:received_images_number);
-		start_timer_omp(&timer_all_decoding_images_omp);
-		for(int i = 0;i < nb_loop;i++)
-		{
-			//Prepare Lima Frame Ptr 
-			//DEB_TRACE() << "Prepare  Lima Frame Ptr("<<i<<")";			
-			bptr = buffer_mgr.getFrameBufferPtr(i);
+            // if this is a slow acquisition, we need to check if there is an error/stop
+            // for a fast management of acquisition end.
+            if((!fast_acquisition) && (built_images_nb) && (m_ufxc_interface->end_of_transfer()))
+            {
+                break;
+            }
+        }
+    }
 
-			//display this once
-			if(i == 0)
-				if(m_is_stack_frames_sum_enabled)
-					DEB_TRACE() << "decoding of 2 bits images & make the sum of "<<received_images_number<<" frames ...";
-				else
-					DEB_TRACE() << "decoding of 2 bits image ...";
+    DEB_TRACE() << "received images number (" << m_acq_frame_nb << ")";
 
-			memset(bptr, 0, width * height * nb_bytes);			
+    // unregister the plugin as an acquisition customer
+    m_ufxc_interface->unregister_acquisition_customer("Lima Ufxc Plugin");
 
-			if(m_is_stack_frames_sum_enabled)				
-				decode_image2_pumpprobe((uint8_t**)imgBuffer, (uint32_t*)bptr, received_images_number, m_is_geometrical_correction_enabled);				
-			else
-				THROW_HW_ERROR(Error) << "This decoding mode is not yet implemented !";//decode_image2_twocnts((uint8_t*)imgBuffer[i*2], (uint8_t*)imgBuffer[i*2+1], (uint8_t*)bptr);
-			
-			//Push the image buffer through Lima 
-			//DEB_TRACE() << "Declare a Lima new Frame Ready (" << m_acq_frame_nb << ")";
-			HwFrameInfoType frame_info;
-			frame_info.acq_frame_nb = m_acq_frame_nb;
-			buffer_mgr.newFrameReady(frame_info);
-			m_acq_frame_nb++;
-		}
-		delta_timer_all_decoding_images_omp = stop_timer_omp(&timer_all_decoding_images_omp);
-		DEB_TRACE() << "---- Elapsed time of all decoding images = " << (int) (delta_timer_all_decoding_images_omp ) << " (ms)";
-	}
-	else //(m_depth == 14)
-	{
-		unsigned width 	= (m_is_geometrical_correction_enabled?512+2:512);
-		unsigned height 	= 256;	
-		unsigned nb_bytes = 2;//always 16 bits, no sum is available in this mode
-		start_timer_omp(&timer_all_decoding_images_omp);
-		for(int i = 0;i < received_images_number;i++)
-		{
-			//Prepare Lima Frame Ptr 
-			//DEB_TRACE() << "Prepare  Lima Frame Ptr("<<i<<")";			
-			bptr = buffer_mgr.getFrameBufferPtr(i);
+    // Logging acquisition stats (speed performance and memory use)
+    m_ufxc_interface->log_acquisition_stats();
 
-			//display this once
-			if(i == 0)
-				DEB_TRACE() << "decoding 14 bits image...";
-
-			memset(bptr, 0, width * height*nb_bytes);			
-			decode_image14_twocnt((uint8_t*) imgBuffer[i * 2], (uint8_t*) imgBuffer[i * 2 + 1], (uint16_t*) bptr, m_is_geometrical_correction_enabled);		
-
-			//Push the image buffer through Lima 
-			//DEB_TRACE() << "Declare a Lima new Frame Ready (" << m_acq_frame_nb << ")";
-			HwFrameInfoType frame_info;
-			frame_info.acq_frame_nb = m_acq_frame_nb;
-			buffer_mgr.newFrameReady(frame_info);
-			m_acq_frame_nb++;
-		}
-		delta_timer_all_decoding_images_omp = stop_timer_omp(&timer_all_decoding_images_omp);	
-		DEB_TRACE() << "---- Elapsed time of all decoding images = " << (int) (delta_timer_all_decoding_images_omp ) << " (ms)";
-	}
-#endif 
-
-	//free deallocate double pointer
-	if(imgBuffer)
-	{
-		for(int i = 0;i < (2 * nb_frames);i++)
-		{
-			delete[] imgBuffer[i];
-		}
-		delete[] imgBuffer;
-	}
-
-	//@END	
-	m_status = Camera::Busy;
+    // return true if ok, false if there was problem during the acquisition, stop or error (timeout for example)
+    return (!m_ufxc_interface->failed_acquisition());
 }
 
 //-----------------------------------------------------
@@ -513,72 +570,82 @@ void Camera::AcqThread::threadFunction()
 
 		if(m_cam.m_quit)
 			return;
+
 		DEB_TRACE() << "AcqThread Running";
 		m_cam.m_thread_running = true;
 		m_cam.m_cond.broadcast();
 		aLock.unlock();
 
-		bool continueFlag = true;
-		while(continueFlag && (!m_cam.m_nb_frames || m_cam.m_acq_frame_nb < m_cam.m_nb_frames))
+	    bool acquisition_ok;
+
+		try
 		{
-			// Check first if acq. has been stopped
-			//DEB_TRACE() << "AcqThread : Check first if acq. has been stopped ";
-			if(m_cam.m_wait_flag)
-			{
-				DEB_TRACE() << "AcqThread: has been stopped from user ";
-				continueFlag = false;
-				continue;
-			}
+		    // read Frames From API/Driver/Etc ... & Copy it into Lima Frame Ptr
+		    DEB_TRACE() << "Read Frame From API/Driver/Etc ... & Copy it into Lima Frame Ptr";
+		    acquisition_ok = m_cam.readFrames();
+        }
+		catch(const ufxclib::Exception& ue)
+		{
+			std::ostringstream err_msg;
+			err_msg << "Error in AcqThread::threadFunction() :"
+                    << "\nreason : " << ue.errors[0].reason
+                    << "\ndesc : " << ue.errors[0].desc
+                    << "\norigin : " << ue.errors[0].origin
+                    << std::endl;
+			DEB_ERROR() << err_msg;
 
-			try
-			{
-				Camera::Status status;
-				m_cam.getStatus(status);
-				m_cam.m_cond.broadcast();
-				if(status == Camera::Busy)
-				{
-					//DEB_TRACE()<<"Camera Busy ...";
-					usleep(400);//UFXCGui use this amount of sleep !
-					continue;
-				}
+			//now detector is in fault
+			m_cam.setStatus(Camera::Fault, true);
 
-				//Read Frame From API/Driver/Etc ... & Copy it into Lima Frame Ptr
-				DEB_TRACE() << "Read Frame From API/Driver/Etc ... & Copy it into Lima Frame Ptr";
-				m_cam.readFrame();
-			}
-			catch(const ufxclib::Exception& ue)
-			{
-				std::ostringstream err_msg;
-				err_msg << "Error in AcqThread::threadFunction() :"
-				 << "\nreason : " << ue.errors[0].reason
-				 << "\ndesc : " << ue.errors[0].desc
-				 << "\norigin : " << ue.errors[0].origin
-				 << std::endl;
-				DEB_ERROR() << err_msg;
-				//now detector is ready
-				m_cam.setStatus(Camera::Fault, false);
-				REPORT_EVENT(err_msg.str())
-				THROW_HW_ERROR(Error) << err_msg.str();
-			}
+			REPORT_EVENT(err_msg.str());
+			THROW_HW_ERROR(Error) << err_msg.str();
 		}
-		//auto t2 = Clock::now();
-		//DEB_TRACE() << "Delta t2-t1: " << std::chrono::duration_cast < std::chrono::nanoseconds > (t2 - t1).count() << " nanoseconds";
 
 		//stopAcq only if this is not already done		
-		DEB_TRACE() << "AcqThread : stopAcq only if this is not already done ";
-		if(!m_cam.m_wait_flag)
-		{
-			DEB_TRACE() << " AcqThread: StopAcq";
-			m_cam.stopAcq();
-		}
+	    bool stopped_by_user = m_cam.m_wait_flag; // making a copy because m_cam.stopAcq will change the value
 
-		//now detector is ready
-		m_cam.setStatus(Camera::Ready, false);
-		DEB_TRACE() << " AcqThread::threadfunction() Setting thread running flag to false";
-		aLock.lock();
-		m_cam.m_thread_running = false;
-		m_cam.m_wait_flag = true;
-		aLock.unlock();
+        DEB_TRACE() << "AcqThread : stopAcq only if this is not already done ";
+        
+        if(!m_cam.m_wait_flag)
+		{
+            DEB_TRACE() << " AcqThread: StopAcq";
+            m_cam.internalStopAcq();
+		}
+        else
+	    // already stopped
+	    {
+            DEB_TRACE() << "AcqThread: has been stopped by user ";
+	    }
+
+        // managing a failure only if a stop was not done
+        if((!stopped_by_user) && (!acquisition_ok))
+        {
+            std::ostringstream err_msg;
+            err_msg << "Failed acquisition! Received only " << m_cam.m_acq_frame_nb << " image(s)" << std::endl;
+            DEB_ERROR() << err_msg;
+
+            //now detector is in fault
+            m_cam.setStatus(Camera::Fault, true);
+
+		    DEB_TRACE() << " AcqThread::threadfunction() Setting thread running flag to false";
+		    aLock.lock();
+		    m_cam.m_thread_running = false;
+		    m_cam.m_wait_flag = true;
+		    aLock.unlock();
+
+            REPORT_EVENT(err_msg.str());
+        }
+        else
+        {
+		    //now detector is ready
+		    m_cam.setStatus(Camera::Ready, false);
+
+		    DEB_TRACE() << " AcqThread::threadfunction() Setting thread running flag to false";
+		    aLock.lock();
+		    m_cam.m_thread_running = false;
+		    m_cam.m_wait_flag = true;
+		    aLock.unlock();
+        }
 	}
 }
 
@@ -611,24 +678,158 @@ Camera::AcqThread::~AcqThread()
 //-----------------------------------------------------
 //
 //-----------------------------------------------------
+void Camera::setCountingMode(CountingModes mode)
+{
+	DEB_MEMBER_FUNCT();
+	DEB_TRACE() << "Camera::setCountingMode - " << DEB_VAR1(mode);
+    AutoMutex aLock(m_cond.mutex());
+
+    // 2 bits, only continuous is allowed
+    if(m_depth == 2)
+    {
+        if(mode != CountingModes::Continuous_2)
+            mode = CountingModes::Continuous_2; // default
+    }
+    else
+    // 4 bits, only continuous is allowed
+    if(m_depth == 4)
+    {
+        if(mode != CountingModes::Continuous_4)
+            mode = CountingModes::Continuous_4; // default
+    }
+    else
+    // 8 bits, only continuous is allowed
+    if(m_depth == 8)
+    {
+        if(mode != CountingModes::Continuous_8)
+            mode = CountingModes::Continuous_8; // default
+    }
+    else
+    // 14 bits, only standard, continuous and long counter are allowed
+    if(m_depth == 14)
+    {
+        if((mode != CountingModes::Standard_14  ) && 
+           (mode != CountingModes::Continuous_14))
+            mode = CountingModes::Standard_14; // default
+    }
+    else
+    // 28 bits, only long counter is allowed
+    if(m_depth == 28)
+    {
+        if(mode != CountingModes::LongCounter_28)
+            mode = CountingModes::LongCounter_28; // default
+    }
+    else
+    // 32 bits, only pump-probe-probe is allowed
+    if(m_depth == 32)
+    {
+        if(mode != CountingModes::PumpProbeProbe_32)
+            mode = CountingModes::PumpProbeProbe_32; // default
+    }
+    else
+    {
+        DEB_ERROR() << "Camera::setCountingMode - pixel depth " << m_depth << "is not managed!";
+    }
+
+    m_counting_mode = mode;
+}
+
+//-----------------------------------------------------
+//
+//-----------------------------------------------------
+void Camera::getCountingMode(CountingModes& mode)
+{
+	DEB_MEMBER_FUNCT();
+	AutoMutex aLock(m_cond.mutex());
+    mode = m_counting_mode;
+}
+
+//-----------------------------------------------------
+//
+//-----------------------------------------------------
+unsigned long Camera::getCountingModePixelDepth(CountingModes mode)
+{
+	DEB_MEMBER_FUNCT();
+	DEB_TRACE() << "Camera::getCountingModePixelDepth - " << DEB_VAR1(mode);
+
+    unsigned long depth = 0; 
+
+    switch(mode)
+    {
+        case CountingModes::Continuous_2     : depth = 2 ; break;
+        case CountingModes::Continuous_4     : depth = 4 ; break;
+        case CountingModes::Continuous_8     : depth = 8 ; break;
+        case CountingModes::Continuous_14    : depth = 14; break;
+        case CountingModes::Standard_14      : depth = 14; break;
+        case CountingModes::LongCounter_28   : depth = 28; break;
+        case CountingModes::PumpProbeProbe_32: depth = 32; break;
+
+	    default:
+            DEB_ERROR() << "Camera::getCountingModePixelDepth - counting mode " << mode << "is not managed!";
+		    break;
+    }
+
+    return depth;
+}
+
+//-----------------------------------------------------
+//
+//-----------------------------------------------------
+void Camera::setGeometricalCorrection(bool enabled)
+{
+	DEB_MEMBER_FUNCT();
+	DEB_TRACE() << "Camera::setGeometricalCorrection - " << DEB_VAR1(enabled);
+	AutoMutex aLock(m_cond.mutex());
+    m_ufxc_interface->set_geometrical_correction(enabled);
+    m_is_geometrical_correction_enabled = m_ufxc_interface->get_geometrical_correction();
+}
+
+//-----------------------------------------------------
+//
+//-----------------------------------------------------
+void Camera::getGeometricalCorrection(bool& enabled)
+{
+	DEB_MEMBER_FUNCT();
+	AutoMutex aLock(m_cond.mutex());
+    m_is_geometrical_correction_enabled = m_ufxc_interface->get_geometrical_correction();
+    enabled = m_is_geometrical_correction_enabled;
+}
+
+//-----------------------------------------------------
+//
+//-----------------------------------------------------
+ImageType Camera::getImageTypeOfCountingMode(CountingModes mode)
+{
+	DEB_MEMBER_FUNCT();
+
+    ImageType type;
+
+    switch(mode)
+    {
+        case CountingModes::Continuous_2     : type = Bpp2 ; break;
+        case CountingModes::Continuous_4     : type = Bpp4 ; break;
+        case CountingModes::Continuous_8     : type = Bpp8 ; break;
+        case CountingModes::Continuous_14    : type = Bpp14; break;
+        case CountingModes::Standard_14      : type = Bpp14; break;
+        case CountingModes::LongCounter_28   : type = Bpp28; break;
+        case CountingModes::PumpProbeProbe_32: type = Bpp32; break;
+
+	    default:
+		    THROW_HW_ERROR(Error) << "This pixel format of the camera is not managed, only (2, 4, 8, 14, 28, 32) bits cameras are managed!";
+		    break;
+    }
+
+    return type;
+}
+
+//-----------------------------------------------------
+//
+//-----------------------------------------------------
 void Camera::getImageType(ImageType& type)
 {
 	DEB_MEMBER_FUNCT();
-	switch(m_depth)
-	{
-		case 2: 
-			if(!m_is_stack_frames_sum_enabled)
-				type = Bpp2;
-			else
-				type = Bpp32;
-			break;		
-		case 14: type = Bpp14;
-			break;
-		default:
-			THROW_HW_ERROR(Error) << "This pixel format of the camera is not managed, only (2 & 14) bits cameras are already managed!";
-			break;
-	}
-	return;
+
+    type = getImageTypeOfCountingMode(m_counting_mode);
 }
 
 //-----------------------------------------------------
@@ -640,20 +841,15 @@ void Camera::setImageType(ImageType type)
 	DEB_TRACE() << "Camera::setImageType - " << DEB_VAR1(type);
 	switch(type)
 	{
-		case Bpp2:
-		{
-			m_depth = 2;
-		}
-			break;
-
-		case Bpp14:
-		{
-			m_depth = 14;
-		}
-			break;
+		case Bpp2 : m_depth = 2 ; break;
+		case Bpp4 : m_depth = 4 ; break;
+		case Bpp8 : m_depth = 8 ; break;
+		case Bpp14: m_depth = 14; break;
+		case Bpp28: m_depth = 28; break;
+		case Bpp32: m_depth = 32; break;
 
 		default:
-			THROW_HW_ERROR(Error) << "This pixel format of the camera is not managed, only (2 & 14) bits cameras are already managed!";
+		    THROW_HW_ERROR(Error) << "This pixel format of the camera is not managed, only (2, 4, 8, 14, 28, 32) bits cameras are managed!";
 			break;
 	}
 }
@@ -688,25 +884,7 @@ void Camera::getDetectorImageSize(Size& size)
 	DEB_MEMBER_FUNCT();
 	AutoMutex aLock(m_cond.mutex());
 	//@BEGIN : Get Detector type from Driver/API	
-
-	int width = 0;
-	int height = 0;
-	if(m_depth == 2 || m_is_stack_frames_sum_enabled)//@@TODO pour contourner un pb de taille image !
-	{
-		//unsigned width = m_ufxc_interface->get_config_acquisition_obj()->get_current_width();
-		//unsigned height = m_ufxc_interface->get_config_acquisition_obj()->get_current_height();
-		width 	= (m_is_geometrical_correction_enabled?512+2:512);
-		height = (m_is_stack_frames_sum_enabled?512:256);
-        size = Size(width, height);
-	}
-	else //if(m_depth == 14)
-	{
-		//unsigned width = m_ufxc_interface->get_config_acquisition_obj()->get_current_width();
-		//unsigned height = m_ufxc_interface->get_config_acquisition_obj()->get_current_height();
-		width 	= (m_is_geometrical_correction_enabled?512+2:512);
-		height 	= 256;	
-        size = Size(width, height);	
-	}
+    size = Size(m_ufxc_interface->get_current_width(), m_ufxc_interface->get_current_height());
 	//@END
 }
 
@@ -741,23 +919,91 @@ HwEventCtrlObj* Camera::getEventCtrlObj()
 //-----------------------------------------------------
 //
 //-----------------------------------------------------
+bool Camera::checkTrigModeOfCountingMode(TrigMode trig_mode, CountingModes counting_mode)
+{
+	DEB_MEMBER_FUNCT();
+	DEB_TRACE() << "Camera::checkTrigModeOfCountingMode() " << DEB_VAR1(trig_mode    ) << ", " 
+                                                            << DEB_VAR1(counting_mode);
+	bool valid_mode = true;
+
+    if((counting_mode == CountingModes::Continuous_2 ) ||
+       (counting_mode == CountingModes::Continuous_4 ) ||
+       (counting_mode == CountingModes::Continuous_8 ) ||
+       (counting_mode == CountingModes::Continuous_14))
+    {
+        if((trig_mode != IntTrig) && (trig_mode != ExtTrigSingle))
+            valid_mode = false;
+    }
+    else
+    if((counting_mode == CountingModes::Standard_14   ) ||
+       (counting_mode == CountingModes::LongCounter_28))
+    {
+        if((trig_mode != IntTrig) && (trig_mode != ExtTrigSingle) && (trig_mode != ExtTrigMult))
+            valid_mode = false;
+    }
+    else
+    if(counting_mode == CountingModes::PumpProbeProbe_32)
+    {
+        if(trig_mode != ExtTrigMult)
+            valid_mode = false;
+    }
+    else
+    {
+        DEB_ERROR() << "Camera::checkTrigModeOfCountingMode - counting mode " << counting_mode << "is not managed!";
+    }
+
+	return valid_mode;
+}
+
+//-----------------------------------------------------
+//
+//-----------------------------------------------------
 bool Camera::checkTrigMode(TrigMode mode)
 {
 	DEB_MEMBER_FUNCT();
-	bool valid_mode;
+    return ((mode == IntTrig      ) || 
+            (mode == ExtTrigSingle) ||
+            (mode == ExtTrigMult  ));
+}
 
-	switch(mode)
-	{
-		case IntTrig:
-		case ExtTrigSingle:
-		case ExtTrigMult:
-			valid_mode = true;
-			break;
-		default:
-			valid_mode = false;
-			break;
-	}
-	return valid_mode;
+//-----------------------------------------------------
+// get default trigger mode for the counting mode
+//-----------------------------------------------------
+TrigMode Camera::getDefaultTrigModeOfCountingMode(CountingModes counting_mode) const
+{
+	DEB_MEMBER_FUNCT();
+
+    TrigMode result;
+
+    if((counting_mode == CountingModes::Continuous_2  ) ||
+       (counting_mode == CountingModes::Continuous_4  ) ||
+       (counting_mode == CountingModes::Continuous_8  ) ||
+       (counting_mode == CountingModes::Continuous_14 ) ||
+       (counting_mode == CountingModes::Standard_14   ) ||
+       (counting_mode == CountingModes::LongCounter_28))
+    {
+        result = IntTrig;
+    }
+    else
+    if(counting_mode == CountingModes::PumpProbeProbe_32)
+    {
+        result = ExtTrigMult;
+    }
+    else
+    {
+        DEB_ERROR() << "Camera::getDefaultTrigModeOfCountingMode - counting mode " << counting_mode << "is not managed!";
+    }
+
+	return result;
+}
+
+//-----------------------------------------------------
+// get default trigger mode for the current counting mode
+//-----------------------------------------------------
+TrigMode Camera::getDefaultTrigMode() const
+{
+    DEB_MEMBER_FUNCT();
+    return getDefaultTrigModeOfCountingMode(m_counting_mode);
 }
 
 //-----------------------------------------------------
@@ -766,65 +1012,81 @@ bool Camera::checkTrigMode(TrigMode mode)
 void Camera::setTrigMode(TrigMode mode)
 {
 	DEB_MEMBER_FUNCT();
-	DEB_TRACE() << "Camera::setTrigMode() " << DEB_VAR1(mode);
+	DEB_TRACE() << "Camera::setTrigMode() " << DEB_VAR1(mode)    << ", " 
+                                            << DEB_VAR1(m_depth) << ", " 
+                                            << DEB_VAR1(m_counting_mode);
 	DEB_PARAM() << DEB_VAR1(mode);
-	AutoMutex aLock(m_cond.mutex());
+
+    bool incoherence = false;
+    ufxclib::EnumAcquisitionMode acq_mode;
+
 	try
 	{
-		switch(mode)
-		{
-			case IntTrig:
-				//do not write to hardware (raise exception if try to write to hardware) , but implicitly values are :
-				//nbimages = nbFrames
-				//nbtrigs = 1
-				if(m_depth == 2)
-				{
-					THROW_HW_ERROR(NotSupported) << DEB_VAR1(mode);
-				}
-				if(m_depth == 14)
-				{
-					m_ufxc_interface->get_config_acquisition_obj()->set_acq_mode(ufxclib::EnumAcquisitionMode::software_raw);
-					DEB_TRACE() << "Trigger Mode = software_raw (IntTrig - 14 bits)";
-				}
-				break;
-			case ExtTrigSingle:
-				//nbimages = nbFrames
-				//nbtrigs = 1
-				if(m_depth == 2)
-				{
-					THROW_HW_ERROR(NotSupported) << DEB_VAR1(mode);
-				}
-				if(m_depth == 14)
-				{
-					m_ufxc_interface->get_config_acquisition_obj()->set_acq_mode(ufxclib::EnumAcquisitionMode::external_raw);
-					DEB_TRACE() << "Trigger Mode = external_raw (ExtTrigSingle - 14 bits)";
-				}
+        // beware, it is not a recursive mutex
+        {
+            AutoMutex aLock(m_cond.mutex());
 
-				m_ufxc_interface->get_config_acquisition_obj()->set_images_number(m_nb_frames);
-				m_ufxc_interface->get_config_acquisition_obj()->set_triggers_number(1);
-				break;
-			case ExtTrigMult:
-				//nbimages = 1
-				//nbtrigs = nbFames
-				if(m_depth == 2)
-				{
-					m_ufxc_interface->get_config_acquisition_obj()->set_acq_mode(ufxclib::EnumAcquisitionMode::pump_and_probe_raw);
-					m_ufxc_interface->get_config_acquisition_obj()->set_images_number(1);
-					m_ufxc_interface->get_config_acquisition_obj()->set_triggers_number(m_pump_probe_nb_frames);
-					DEB_TRACE() << "Trigger Mode = pump_and_probe_raw (ExtTrigMult - 2 bits)";
-				}
-				if(m_depth == 14)
-				{
-					m_ufxc_interface->get_config_acquisition_obj()->set_acq_mode(ufxclib::EnumAcquisitionMode::external_raw);
-					m_ufxc_interface->get_config_acquisition_obj()->set_images_number(1);
-					m_ufxc_interface->get_config_acquisition_obj()->set_triggers_number(m_nb_frames);
-					DEB_TRACE() << "Trigger Mode = external_raw (ExtTrigMult - 14 bits)";
-				}
-				break;
-			default:
-				THROW_HW_ERROR(NotSupported) << DEB_VAR1(mode);
-		}
-		m_trigger_mode = mode;
+            if(m_counting_mode == CountingModes::Continuous_2)
+            {
+                if(mode == IntTrig      ) acq_mode = EnumAcquisitionMode::software_continuous_2_raw; else
+                if(mode == ExtTrigSingle) acq_mode = EnumAcquisitionMode::external_continuous_2_raw; else
+                    incoherence = true;
+            }
+            else
+            if(m_counting_mode == CountingModes::Continuous_4)
+            {
+                if(mode == IntTrig      ) acq_mode = EnumAcquisitionMode::software_continuous_4_raw; else
+                if(mode == ExtTrigSingle) acq_mode = EnumAcquisitionMode::external_continuous_4_raw; else
+                    incoherence = true;
+            }
+            else
+            if(m_counting_mode == CountingModes::Continuous_8)
+            {
+                if(mode == IntTrig      ) acq_mode = EnumAcquisitionMode::software_continuous_8_raw; else
+                if(mode == ExtTrigSingle) acq_mode = EnumAcquisitionMode::external_continuous_8_raw; else
+                    incoherence = true;
+            }
+            else
+            if(m_counting_mode == CountingModes::Continuous_14)
+            {
+                if(mode == IntTrig      ) acq_mode = EnumAcquisitionMode::software_continuous_14_raw; else
+                if(mode == ExtTrigSingle) acq_mode = EnumAcquisitionMode::external_continuous_14_raw; else
+                    incoherence = true;
+            }
+            else
+            if(m_counting_mode == CountingModes::Standard_14)
+            {
+                if(mode == IntTrig      ) acq_mode = EnumAcquisitionMode::software_14_raw; else
+                if(mode == ExtTrigSingle) acq_mode = EnumAcquisitionMode::external_14_raw; else
+                if(mode == ExtTrigMult  ) acq_mode = EnumAcquisitionMode::external_14_raw; else
+                    incoherence = true;
+            }
+            else
+            if(m_counting_mode == CountingModes::LongCounter_28)
+            {
+                if(mode == IntTrig      ) acq_mode = EnumAcquisitionMode::software_long_counter_14_raw; else
+                if(mode == ExtTrigSingle) acq_mode = EnumAcquisitionMode::external_long_counter_14_raw; else
+                if(mode == ExtTrigMult  ) acq_mode = EnumAcquisitionMode::external_long_counter_14_raw; else
+                    incoherence = true;
+            }
+            else
+            if(m_counting_mode == CountingModes::PumpProbeProbe_32)
+            {
+                if(mode == ExtTrigMult  ) acq_mode = EnumAcquisitionMode::pump_and_probe_2_raw; else
+                    incoherence = true;
+            }
+
+            if(incoherence)
+            {
+		        THROW_HW_ERROR(NotSupported) << DEB_VAR1(mode);
+            }
+
+    	    m_trigger_mode = mode;
+            m_ufxc_interface->set_acq_mode(acq_mode);
+        }
+
+        // recursive lock problem - can not be called with a locked mutex
+        setNbFrames(m_nb_frames);
 	}
 	catch(const ufxclib::Exception& ue)
 	{
@@ -840,13 +1102,37 @@ void Camera::setTrigMode(TrigMode mode)
 }
 
 //-----------------------------------------------------
-//
+// NEVER USED.
 //-----------------------------------------------------
 void Camera::getTrigMode(TrigMode& mode)
 {
 	DEB_MEMBER_FUNCT();
 	mode = m_trigger_mode;
 	DEB_RETURN() << DEB_VAR1(mode);
+}
+
+//-----------------------------------------------------
+// 
+//-----------------------------------------------------
+std::string Camera::getTrigLabel(TrigMode& mode) const
+{
+	DEB_MEMBER_FUNCT();
+
+    std::string triggerName = "";
+
+    switch(mode)
+    {
+        case IntTrig: triggerName        = "INTERNAL_SINGLE"     ; break;
+        case ExtTrigSingle: triggerName  = "EXTERNAL_SINGLE"     ; break;
+        case ExtTrigMult: triggerName    = "EXTERNAL_MULTI"      ; break;
+        case ExtGate: triggerName        = "EXTERNAL_GATE"       ; break;
+        case IntTrigMult: triggerName    = "INTERNAL_MULTI"      ; break;
+        case ExtStartStop: triggerName   = "EXTERNAL_START_STOP" ; break;
+        case ExtTrigReadout: triggerName = "EXTERNAL_READOUT"    ; break;
+        default: triggerName = "ERROR"; break;
+    }
+    
+    return triggerName;
 }
 
 //-----------------------------------------------------
@@ -859,16 +1145,16 @@ void Camera::getExpTime(double& exp_time)
 	try
 	{
 		//UFXCLib use (ms), but lima use (second) as unit
-		exp_time = m_ufxc_interface->get_config_acquisition_obj()->get_counting_time_ms();
-		exp_time = exp_time / 1000;
+		exp_time   = m_ufxc_interface->get_counting_time_ms();
+		exp_time   = exp_time / 1000;
 		m_exp_time = exp_time;
 	}
 	catch(const ufxclib::Exception& ue)
 	{
 		std::ostringstream err_msg;
-		err_msg << "Error in Camera::setTrigMode() :"
+		err_msg << "Error in Camera::getExpTime() :"
 		 << "\nreason : " << ue.errors[0].reason
-		 << "\ndesc : " << ue.errors[0].desc
+		 << "\ndesc : "   << ue.errors[0].desc
 		 << "\norigin : " << ue.errors[0].origin
 		 << std::endl;
 		DEB_ERROR() << err_msg;
@@ -884,24 +1170,43 @@ void Camera::setExpTime(double exp_time)
 {
 	DEB_MEMBER_FUNCT();
 	DEB_TRACE() << "Camera::setExpTime() " << DEB_VAR1(exp_time);
-	AutoMutex aLock(m_cond.mutex());
-	try
+    {
+        AutoMutex aLock(m_cond.mutex());
+	    try
+	    {
+		    if(exp_time < 0.0)
+		    {
+			    THROW_HW_ERROR(Error) << "Incorrect exposure time!";
+		    }
+            
+            //UFXCLib use (ms), but lima use (second) as unit
+		    m_ufxc_interface->set_counting_time_ms(exp_time * 1000);
+		    m_exp_time = exp_time;
+	    }
+	    catch(const ufxclib::Exception& ue)
+	    {
+		    std::ostringstream err_msg;
+		    err_msg << "Error in Camera::setExpTime() :"
+		     << "\nreason : " << ue.errors[0].reason
+		     << "\ndesc : "   << ue.errors[0].desc
+		     << "\norigin : " << ue.errors[0].origin
+		     << std::endl;
+		    DEB_ERROR() << err_msg;
+		    THROW_HW_FATAL(ErrorType::Error) << err_msg.str();
+	    }
+    }
+
+	//only in mode pump & probe
+    // recursive lock problem - can not be called with a locked mutex
+	if(m_counting_mode == lima::Ufxc::Camera::CountingModes::PumpProbeProbe_32)
 	{
-		//UFXCLib use (ms), but lima use (second) as unit
-		m_ufxc_interface->get_config_acquisition_obj()->set_counting_time_ms(exp_time * 1000);
-		m_exp_time = exp_time;
-	}
-	catch(const ufxclib::Exception& ue)
-	{
-		std::ostringstream err_msg;
-		err_msg << "Error in Camera::setExpTime() :"
-		 << "\nreason : " << ue.errors[0].reason
-		 << "\ndesc : " << ue.errors[0].desc
-		 << "\norigin : " << ue.errors[0].origin
-		 << std::endl;
-		DEB_ERROR() << err_msg;
-		THROW_HW_FATAL(ErrorType::Error) << err_msg.str();
-	}
+        computePumpProbeNbFrames(m_exp_time);
+
+        // updating again the frames number.
+        // In Lima, setExpTime is called after setTrigMode and setNbFrames,
+        // so the previous set value can be false.
+        setNbFrames(m_nb_frames); 
+    }
 }
 
 //-----------------------------------------------------
@@ -915,17 +1220,17 @@ void Camera::setLatTime(double lat_time)
 	try
 	{
 		//UFXCLib use (ms), but lima use (second) as unit
-		m_ufxc_interface->get_config_acquisition_obj()->set_waiting_time_ms(lat_time * 1000);
+		m_ufxc_interface->set_waiting_time_ms(lat_time * 1000);
 		m_lat_time = lat_time;
 	}
 	catch(const ufxclib::Exception& ue)
 	{
 		std::ostringstream err_msg;
 		err_msg << "Error in Camera::setLatTime() :"
-		 << "\nreason : " << ue.errors[0].reason
-		 << "\ndesc : " << ue.errors[0].desc
-		 << "\norigin : " << ue.errors[0].origin
-		 << std::endl;
+                << "\nreason : " << ue.errors[0].reason
+                << "\ndesc : "   << ue.errors[0].desc
+                << "\norigin : " << ue.errors[0].origin
+                << std::endl;
 		DEB_ERROR() << err_msg;
 		THROW_HW_FATAL(ErrorType::Error) << err_msg.str();
 	}
@@ -941,8 +1246,7 @@ void Camera::getLatTime(double& lat_time)
 	try
 	{
 		//UFXCLib use (ms), but lima use (second) as unit 
-		lat_time = m_ufxc_interface->get_config_acquisition_obj()->get_waiting_time_ms();
-		lat_time = lat_time / 1000;
+		lat_time   = m_ufxc_interface->get_waiting_time_ms() / 1000.0;
 		m_lat_time = lat_time;
 		DEB_RETURN() << DEB_VAR1(lat_time);
 	}
@@ -950,10 +1254,10 @@ void Camera::getLatTime(double& lat_time)
 	{
 		std::ostringstream err_msg;
 		err_msg << "Error in Camera::getLatTime() :"
-		 << "\nreason : " << ue.errors[0].reason
-		 << "\ndesc : " << ue.errors[0].desc
-		 << "\norigin : " << ue.errors[0].origin
-		 << std::endl;
+                << "\nreason : " << ue.errors[0].reason
+                << "\ndesc : "   << ue.errors[0].desc
+                << "\norigin : " << ue.errors[0].origin
+                << std::endl;
 		DEB_ERROR() << err_msg;
 		THROW_HW_FATAL(ErrorType::Error) << err_msg.str();
 	}
@@ -965,9 +1269,24 @@ void Camera::getLatTime(double& lat_time)
 void Camera::getExposureTimeRange(double& min_expo, double& max_expo) const
 {
 	DEB_MEMBER_FUNCT();
-	min_expo = 0.;
-	max_expo = 10;//10s
-	DEB_RETURN() << DEB_VAR2(min_expo, max_expo);
+	try
+	{
+		//UFXCLib uses (ms), but lima uses (second) as unit 
+		min_expo = m_ufxc_interface->get_min_exposure_time_ms() / 1000.0;
+        max_expo = m_ufxc_interface->get_max_exposure_time_ms() / 1000.0;
+	    DEB_RETURN() << DEB_VAR2(min_expo, max_expo);
+	}
+	catch(const ufxclib::Exception& ue)
+	{
+		std::ostringstream err_msg;
+		err_msg << "Error in Camera::getExposureTimeRange() :"
+                << "\nreason : " << ue.errors[0].reason
+                << "\ndesc : "   << ue.errors[0].desc
+                << "\norigin : " << ue.errors[0].origin
+                << std::endl;
+		DEB_ERROR() << err_msg;
+		THROW_HW_FATAL(ErrorType::Error) << err_msg.str();
+	}
 }
 
 //-----------------------------------------------------
@@ -976,11 +1295,82 @@ void Camera::getExposureTimeRange(double& min_expo, double& max_expo) const
 void Camera::getLatTimeRange(double& min_lat, double& max_lat) const
 {
 	DEB_MEMBER_FUNCT();
-	// --- no info on min latency
-	min_lat = 0.;
-	// --- do not know how to get the max_lat, fix it as the max exposure time
-	max_lat = 10;//10s
-	DEB_RETURN() << DEB_VAR2(min_lat, max_lat);
+
+	try
+	{
+		//UFXCLib uses (ms), but lima uses (second) as unit 
+		min_lat = m_ufxc_interface->get_min_latency_time_ms() / 1000.0;
+        max_lat = m_ufxc_interface->get_max_latency_time_ms() / 1000.0;
+	    DEB_RETURN() << DEB_VAR2(min_lat, max_lat);
+	}
+	catch(const ufxclib::Exception& ue)
+	{
+		std::ostringstream err_msg;
+		err_msg << "Error in Camera::getLatTimeRange() :"
+                << "\nreason : " << ue.errors[0].reason
+                << "\ndesc : "   << ue.errors[0].desc
+                << "\norigin : " << ue.errors[0].origin
+                << std::endl;
+		DEB_ERROR() << err_msg;
+		THROW_HW_FATAL(ErrorType::Error) << err_msg.str();
+	}
+}
+
+//-----------------------------------------------------
+//
+//-----------------------------------------------------
+void Camera::getCorrectLatTime(double& lat_time) const
+{
+	DEB_MEMBER_FUNCT();
+
+	try
+	{
+		//UFXCLib uses (ms), but lima uses (second) as unit 
+        double min_lat = m_ufxc_interface->get_min_latency_time_ms() / 1000.0;
+        double max_lat = m_ufxc_interface->get_max_latency_time_ms() / 1000.0;
+
+        if(lat_time < min_lat) lat_time = min_lat;
+        if(lat_time > max_lat) lat_time = max_lat;
+	}
+	catch(const ufxclib::Exception& ue)
+	{
+		std::ostringstream err_msg;
+		err_msg << "Error in Camera::getCorrectLatTime() :"
+                << "\nreason : " << ue.errors[0].reason
+                << "\ndesc : "   << ue.errors[0].desc
+                << "\norigin : " << ue.errors[0].origin
+                << std::endl;
+		DEB_ERROR() << err_msg;
+		THROW_HW_FATAL(ErrorType::Error) << err_msg.str();
+	}
+}
+
+//-----------------------------------------------------
+//
+//-----------------------------------------------------
+void Camera::getCorrectExposureTime(double& exp_time) const
+{
+	DEB_MEMBER_FUNCT();
+	try
+	{
+		//UFXCLib uses (ms), but lima uses (second) as unit 
+		double min_expo = m_ufxc_interface->get_min_exposure_time_ms() / 1000.0;
+        double max_expo = m_ufxc_interface->get_max_exposure_time_ms() / 1000.0;
+
+        if(exp_time < min_expo) exp_time = min_expo;
+        if(exp_time > max_expo) exp_time = max_expo;
+	}
+	catch(const ufxclib::Exception& ue)
+	{
+		std::ostringstream err_msg;
+		err_msg << "Error in Camera::getCorrectExposureTime() :"
+                << "\nreason : " << ue.errors[0].reason
+                << "\ndesc : "   << ue.errors[0].desc
+                << "\norigin : " << ue.errors[0].origin
+                << std::endl;
+		DEB_ERROR() << err_msg;
+		THROW_HW_FATAL(ErrorType::Error) << err_msg.str();
+	}
 }
 
 //-----------------------------------------------------
@@ -993,32 +1383,42 @@ void Camera::setNbFrames(int nb_frames)
 	AutoMutex aLock(m_cond.mutex());
 	try
 	{
-		if(m_nb_frames < 0)
+		if(nb_frames < 0)
 		{
 			THROW_HW_ERROR(Error) << "Number of frames to acquire has not been set";
 		}
 
+        std::size_t images_number   = 0;
+        std::size_t triggers_number = 0;
+
 		TrigMode trigger_mode;
 		getTrigMode(trigger_mode);
-		if(trigger_mode == ExtTrigMult && m_depth == 2)
-		{
 
-			m_ufxc_interface->get_config_acquisition_obj()->set_images_number(1);
-			m_ufxc_interface->get_config_acquisition_obj()->set_triggers_number(m_pump_probe_nb_frames);
-			m_nb_frames = (m_is_stack_frames_sum_enabled?1:m_pump_probe_nb_frames);
-		}
-		else if(trigger_mode == ExtTrigMult && m_depth == 14)
-		{
-			m_ufxc_interface->get_config_acquisition_obj()->set_images_number(1);
-			m_ufxc_interface->get_config_acquisition_obj()->set_triggers_number(nb_frames);
-			m_nb_frames = nb_frames;
-		}
-		else
-		{
-			m_ufxc_interface->get_config_acquisition_obj()->set_images_number(nb_frames);
-			m_ufxc_interface->get_config_acquisition_obj()->set_triggers_number(1);
-			m_nb_frames = nb_frames;
-		}
+        if((trigger_mode == IntTrig) || (trigger_mode == ExtTrigSingle))
+        {
+	        images_number   = nb_frames;
+	        triggers_number = 1;
+	        m_nb_frames     = nb_frames;
+        }
+        else
+        if(trigger_mode == ExtTrigMult)
+        {
+	        if(m_counting_mode == CountingModes::PumpProbeProbe_32)
+            {
+                images_number   = 1;
+	            triggers_number = m_pump_probe_nb_frames;
+	            m_nb_frames     = 1;
+            }
+            else
+            {
+                images_number   = 1;
+	            triggers_number = nb_frames;
+	            m_nb_frames     = nb_frames;
+            }
+        }
+
+        m_ufxc_interface->set_images_number  (images_number  );
+        m_ufxc_interface->set_triggers_number(triggers_number);
 	}
 	catch(const ufxclib::Exception& ue)
 	{
@@ -1042,24 +1442,25 @@ void Camera::getNbFrames(int& nb_frames)
 	AutoMutex aLock(m_cond.mutex());
 	try
 	{
-		if(m_depth == 2)
-		{
-			nb_frames = (m_is_stack_frames_sum_enabled?1:m_pump_probe_nb_frames);
-			m_nb_frames = nb_frames;
-		}
-		else //if(m_depth == 14)
-		{
-			nb_frames = m_ufxc_interface->get_config_acquisition_obj()->get_images_number();
-			m_nb_frames = nb_frames;
-		}
+        if(m_counting_mode == CountingModes::PumpProbeProbe_32)
+        {
+		    m_nb_frames = 1;
+        }
+        else
+        {
+            std::size_t images_number   = m_ufxc_interface->get_images_number  ();
+            std::size_t triggers_number = m_ufxc_interface->get_triggers_number();
+            m_nb_frames = images_number * triggers_number;
+        }
 
+        nb_frames = m_nb_frames;
 	}
 	catch(const ufxclib::Exception& ue)
 	{
 		std::ostringstream err_msg;
 		err_msg << "Error in Camera::getNbFrames() :"
 		 << "\nreason : " << ue.errors[0].reason
-		 << "\ndesc : " << ue.errors[0].desc
+		 << "\ndesc : "   << ue.errors[0].desc
 		 << "\norigin : " << ue.errors[0].origin
 		 << std::endl;
 		DEB_ERROR() << err_msg;
@@ -1108,7 +1509,7 @@ void Camera::get_firmware_version(std::string & version)
 	AutoMutex aLock(m_cond.mutex());
 	try
 	{
-		version = m_ufxc_interface->get_daq_monitoring_obj()->get_firmware_version();
+		version = m_ufxc_interface->get_firmware_version();
 	}
 	catch(const ufxclib::Exception& ue)
 	{
@@ -1132,7 +1533,7 @@ void Camera::get_detector_temperature(unsigned long& temp)
 	AutoMutex aLock(m_cond.mutex());
 	try
 	{
-		temp = m_ufxc_interface->get_daq_monitoring_obj()->get_detector_temp();
+		temp = m_ufxc_interface->get_detector_temp();
 	}
 	catch(const ufxclib::Exception& ue)
 	{
@@ -1156,7 +1557,7 @@ void Camera::set_threshold_Low1(float thr)
 	AutoMutex aLock(m_cond.mutex());
 	try
 	{
-		m_ufxc_interface->get_config_acquisition_obj()->set_low_1_threshold(thr);
+		m_ufxc_interface->set_low_1_threshold(thr);
 	}
 	catch(const ufxclib::Exception& ue)
 	{
@@ -1180,7 +1581,7 @@ void Camera::get_threshold_Low1(unsigned long& thr)
 	AutoMutex aLock(m_cond.mutex());
 	try
 	{
-		thr = m_ufxc_interface->get_config_acquisition_obj()->get_low_1_threshold();
+		thr = m_ufxc_interface->get_low_1_threshold();
 	}
 	catch(const ufxclib::Exception& ue)
 	{
@@ -1204,7 +1605,7 @@ void Camera::set_threshold_Low2(float thr)
 	AutoMutex aLock(m_cond.mutex());
 	try
 	{
-		m_ufxc_interface->get_config_acquisition_obj()->set_low_2_threshold(thr);
+		m_ufxc_interface->set_low_2_threshold(thr);
 	}
 	catch(const ufxclib::Exception& ue)
 	{
@@ -1228,7 +1629,7 @@ void Camera::get_threshold_Low2(unsigned long& thr)
 	AutoMutex aLock(m_cond.mutex());
 	try
 	{
-		thr = m_ufxc_interface->get_config_acquisition_obj()->get_low_2_threshold();
+		thr = m_ufxc_interface->get_low_2_threshold();
 	}
 	catch(const ufxclib::Exception& ue)
 	{
@@ -1252,7 +1653,7 @@ void Camera::set_threshold_High1(float thr)
 	AutoMutex aLock(m_cond.mutex());
 	try
 	{
-		m_ufxc_interface->get_config_acquisition_obj()->set_high_1_threshold(thr);
+		m_ufxc_interface->set_high_1_threshold(thr);
 	}
 	catch(const ufxclib::Exception& ue)
 	{
@@ -1276,7 +1677,7 @@ void Camera::get_threshold_High1(unsigned long& thr)
 	AutoMutex aLock(m_cond.mutex());
 	try
 	{
-		thr = m_ufxc_interface->get_config_acquisition_obj()->get_high_1_threshold();
+		thr = m_ufxc_interface->get_high_1_threshold();
 	}
 	catch(const ufxclib::Exception& ue)
 	{
@@ -1300,7 +1701,7 @@ void Camera::set_threshold_High2(float thr)
 	AutoMutex aLock(m_cond.mutex());
 	try
 	{
-		m_ufxc_interface->get_config_acquisition_obj()->set_high_2_threshold(thr);
+		m_ufxc_interface->set_high_2_threshold(thr);
 	}
 	catch(const ufxclib::Exception& ue)
 	{
@@ -1348,7 +1749,7 @@ void Camera::get_threshold_High2(unsigned long& thr)
 	AutoMutex aLock(m_cond.mutex());
 	try
 	{
-		thr = m_ufxc_interface->get_config_acquisition_obj()->get_high_2_threshold();
+		thr = m_ufxc_interface->get_high_2_threshold();
 	}
 	catch(const ufxclib::Exception& ue)
 	{
@@ -1403,7 +1804,6 @@ void Camera::SetHardwareRegisters()
 	m_detector_registers[ufxclib::EnumDetectorConfigKey::PIXCONF_COL_127_96_B] = "FMC.PIXCONF_COL_127_96_B";
 	m_detector_registers[ufxclib::EnumDetectorConfigKey::PIXLINE_CONFIG] = "FMC.PixLineConfig";
 
-
 	m_monitor_registers[ufxclib::EnumMonitoringKey::TEMP_DAQ_PICO] = "SLOW.TEMP_DAQ_PICO";
 	m_monitor_registers[ufxclib::EnumMonitoringKey::TEMP_DAQ_SFP] = "SLOW.TEMP_DAQ_SFP";
 	m_monitor_registers[ufxclib::EnumMonitoringKey::FW_DELAY] = "FMC.FW_DELAY";
@@ -1428,26 +1828,69 @@ void Camera::SetHardwareRegisters()
  *******************************************************/
 void Camera::set_pump_probe_trigger_acquisition_frequency(float frequency)
 {
-	m_pump_probe_trigger_acquisition_frequency = frequency;
+	AutoMutex aLock(m_cond.mutex());
+    m_ufxc_interface->set_pump_probe_frequency_Hz(static_cast<double>(frequency));
 }
 /*******************************************************
  * \brief get trigger acquisition frequency for the pump and probe mode (2bits & ext triggger multi)
  *******************************************************/
 void Camera::get_pump_probe_trigger_acquisition_frequency(float& frequency)
 {
-	frequency = m_pump_probe_trigger_acquisition_frequency;
+	AutoMutex aLock(m_cond.mutex());
+	frequency = static_cast<float>(m_ufxc_interface->get_pump_probe_frequency_Hz());
 }
 /*******************************************************
  * \brief set nb frames for the pump and probe mode (2bits & ext triggger multi)
  *******************************************************/
-void Camera::set_pump_probe_nb_frames(float nb_frames)
+void Camera::set_pump_probe_nb_frames(int nb_frames)
 {
-	m_pump_probe_nb_frames = nb_frames;
+	AutoMutex aLock(m_cond.mutex());
+    m_pump_probe_nb_frames = nb_frames;
 }
 /*******************************************************
  * \brief get nb frames for the pump and probe mode (2bits & ext triggger multi)
  *******************************************************/
-void Camera::get_pump_probe_nb_frames(float& nb_frames)
+void Camera::get_pump_probe_nb_frames(int& nb_frames)
 {
-	nb_frames = m_pump_probe_nb_frames;
+	AutoMutex aLock(m_cond.mutex());
+    nb_frames = m_pump_probe_nb_frames;
+}
+
+/*******************************************************
+ * \brief compute pump probe nb frames
+ *******************************************************/
+void Camera::computePumpProbeNbFrames(double in_exposure)
+{
+	DEB_MEMBER_FUNCT();
+
+	try
+	{
+        int nb_frames_pump_probe;
+
+        // beware, it is not a recursive mutex
+        {
+            AutoMutex aLock(m_cond.mutex());
+
+            double acquisition_frequency = m_ufxc_interface->get_pump_probe_frequency_Hz();
+            nb_frames_pump_probe = static_cast<int> (round(in_exposure * acquisition_frequency / 2)*2);
+
+            DEB_TRACE() << "in_exposure = "           << in_exposure          ;
+            DEB_TRACE() << "acquisition_frequency = " << acquisition_frequency;
+            DEB_TRACE() << "nb_frames_pump_probe = "  << nb_frames_pump_probe ;
+        }
+
+        // recursive lock problem - can not be called with a locked mutex
+		set_pump_probe_nb_frames(nb_frames_pump_probe);
+    }
+	catch(const ufxclib::Exception& ue)
+	{
+		std::ostringstream err_msg;
+		err_msg << "Error in Camera::computePumpProbeData() :"
+		 << "\nreason : " << ue.errors[0].reason
+		 << "\ndesc : "   << ue.errors[0].desc
+		 << "\norigin : " << ue.errors[0].origin
+		 << std::endl;
+		DEB_ERROR() << err_msg;
+		THROW_HW_FATAL(ErrorType::Error) << err_msg.str();
+	}
 }

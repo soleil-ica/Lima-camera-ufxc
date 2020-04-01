@@ -27,12 +27,19 @@
 using namespace lima;
 using namespace lima::Ufxc;
 
+#ifndef __linux__
+#    define DEF_FNID static char *fnId = __FUNCTION__;
+#else
+#    define DEF_FNID const char *fnId __attribute__((unused)) = __FUNCTION__;
+#endif
+
 //-----------------------------------------------------
 //
 //-----------------------------------------------------
 SyncCtrlObj::SyncCtrlObj(Camera& cam):m_cam(cam)
 {
 	DEB_CONSTRUCTOR();
+    m_first_read_of_valid_range = true;
 }
 
 //-----------------------------------------------------
@@ -86,7 +93,8 @@ void SyncCtrlObj::setExpTime(double exp_time)
 {
 	DEB_MEMBER_FUNCT();
 	DEB_PARAM() << DEB_VAR1(exp_time);
-	m_cam.setExpTime(exp_time);
+    updateValidRanges();
+    m_cam.setExpTime(exp_time);
 }
 
 //-----------------------------------------------------
@@ -104,6 +112,7 @@ void SyncCtrlObj::getExpTime(double& exp_time)
 void SyncCtrlObj::setLatTime(double lat_time)
 {
 	DEB_MEMBER_FUNCT();
+    updateValidRanges();
 	m_cam.setLatTime(lat_time);
 }
 
@@ -140,6 +149,8 @@ void SyncCtrlObj::getNbHwFrames(int& nb_frames)
 void SyncCtrlObj::getValidRanges(ValidRangesType& valid_ranges)
 {
 	DEB_MEMBER_FUNCT();
+    DEF_FNID;
+
 	double min_time;
 	double max_time;
 	m_cam.getExposureTimeRange(min_time, max_time);
@@ -149,6 +160,36 @@ void SyncCtrlObj::getValidRanges(ValidRangesType& valid_ranges)
 	m_cam.getLatTimeRange(min_time, max_time);
 	valid_ranges.min_lat_time = min_time;
 	valid_ranges.max_lat_time = max_time;
+
+    if(m_first_read_of_valid_range)
+    {
+        m_current_valid_ranges      = valid_ranges;
+        m_first_read_of_valid_range = false;
+    }
 }
+
+//-----------------------------------------------------
+// manages the update of valid ranes (only if needed)
+//-----------------------------------------------------
+void SyncCtrlObj::updateValidRanges()
+{
+	DEB_MEMBER_FUNCT();
+    DEF_FNID;
+
+    ValidRangesType valid_ranges;
+    getValidRanges(valid_ranges);
+
+    // managing the update of valid ranges (only if needed)
+    if((valid_ranges.min_exp_time != m_current_valid_ranges.min_exp_time) || 
+       (valid_ranges.max_exp_time != m_current_valid_ranges.max_exp_time) || 
+       (valid_ranges.min_lat_time != m_current_valid_ranges.min_lat_time) || 
+       (valid_ranges.max_lat_time != m_current_valid_ranges.max_lat_time))
+    {
+        m_current_valid_ranges = valid_ranges;
+        validRangesChanged(m_current_valid_ranges); // calling ... callback
+        DEB_TRACE() << fnId << ": callback - new valid_ranges: " << DEB_VAR1(m_current_valid_ranges);
+    }
+}
+
 //-----------------------------------------------------
 
