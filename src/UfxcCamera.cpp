@@ -166,7 +166,8 @@ bool Camera::convertCountingModeEnum(enum lima::Ufxc::Camera::CountingModes & in
 /************************************************************************
  * \brief constructor
  ************************************************************************/
-Camera::Camera(	const std::string& TCP_ip_address , unsigned long TCP_port ,
+Camera::Camera(	const std::string& Ufxc_Model     ,
+                const std::string& TCP_ip_address , unsigned long TCP_port ,
 				const std::string& SFP1_ip_address, unsigned long SFP1_port,
 				const std::string& SFP2_ip_address, unsigned long SFP2_port,
 				const std::string& SFP3_ip_address, unsigned long SFP3_port,
@@ -228,8 +229,11 @@ Camera::Camera(	const std::string& TCP_ip_address , unsigned long TCP_port ,
 		//- create the main ufxc object
 		m_ufxc_interface = new ufxclib::UFXCInterface();
 
+        // convert the Ufxc_Model (label) to the detector type used by the SDK
+        ufxclib::EnumDetectorType sdk_detector_type = m_ufxc_interface->get_detector_type_from_label(Ufxc_Model);
+
 		//- connect to the DAQ/Detector
-		m_ufxc_interface->open_connection(TCP_cnx, SFP1_cnx, SFP2_cnx, SFP3_cnx, SFP_MTU);
+		m_ufxc_interface->open_connection(sdk_detector_type, TCP_cnx, SFP1_cnx, SFP2_cnx, SFP3_cnx, SFP_MTU);
 
 		//- set the registers to the DAQ
 		m_ufxc_interface->set_acquisition_registers_names(m_acquisition_registers);

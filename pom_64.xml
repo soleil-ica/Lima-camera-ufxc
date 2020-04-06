@@ -10,7 +10,7 @@
 
     <groupId>fr.soleil.lib.Lima.Camera</groupId>
     <artifactId>LimaUfxc-amd64-Linux-gcc-shared-${mode}</artifactId>
-    <version>1.1.0</version>
+    <version>1.2.0</version>
 
     <packaging>nar</packaging>
     <name>LimaUfxc</name>
@@ -38,7 +38,7 @@
         <dependency>
             <groupId>fr.soleil.lib</groupId>
 			<artifactId>UFXCLib-amd64-Linux-gcc-shared-${mode}</artifactId>
-            <version>1.1.0</version>
+            <version>1.2.0</version>
         </dependency>
     </dependencies>
 

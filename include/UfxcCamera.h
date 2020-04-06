@@ -90,14 +90,15 @@ public:
 
     //==================================================================
     // constructor
-    Camera( const std::string&  TCP_ip_address , unsigned long TCP_port ,   //- IP Address and port for the config
+    Camera( const std::string&  Ufxc_Model     ,                            //- Detector model (label) 
+            const std::string&  TCP_ip_address , unsigned long TCP_port ,   //- IP Address and port for the config
             const std::string&  SFP1_ip_address, unsigned long SFP1_port,   //- IP Address and port for the SFP1
             const std::string&  SFP2_ip_address, unsigned long SFP2_port,   //- IP Address and port for the SFP2
             const std::string&  SFP3_ip_address, unsigned long SFP3_port,   //- IP Address and port for the SFP3
-            unsigned long       SFP_MTU        ,                            // MTU value of the SFP ports
+            unsigned long       SFP_MTU        ,                            //- MTU value of the SFP ports
             unsigned long       timeout_ms     ,                            //- timeout in ms
-            unsigned long       pixel_depth    ,                            // pixel depth from the generic device properties
-            std::string         counting_mode  );                           // counting mode from the specific properties
+            unsigned long       pixel_depth    ,                            //- pixel depth from the generic device properties
+            std::string         counting_mode  );                           //- counting mode from the specific properties
 
     virtual ~Camera();
 
