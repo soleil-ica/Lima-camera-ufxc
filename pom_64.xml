@@ -18,8 +18,8 @@
     
 	<properties>
 		<!-- path to the 64 bits libs -->
-        <!--<libs-64bits>/home/informatique/ica/ica/LIB_EL6_64</libs-64bits>-->
-        <libs-64bits>/media/sf_Partage/DeviceSources-ufxc/LIB_EL6_64</libs-64bits>
+        <libs-64bits>/home/informatique/ica/ica/LIB_EL6_64</libs-64bits>
+        <!--<libs-64bits>/media/sf_Partage/DeviceSources-ufxc-github/LIB_EL6_64</libs-64bits>-->
 	</properties>
     
     <scm>
@@ -31,13 +31,13 @@
     <dependencies>
         <dependency>
             <groupId>fr.soleil.lib</groupId>
-			<artifactId>LimaCore-amd64-Linux-gcc-shared-${mode}</artifactId>
+            <artifactId>LimaCore-amd64-Linux-gcc-shared-${mode}</artifactId>
             <version>1.7.9</version>
         </dependency>
         
         <dependency>
             <groupId>fr.soleil.lib</groupId>
-			<artifactId>UFXCLib-amd64-Linux-gcc-shared-${mode}</artifactId>
+            <artifactId>UFXCLib-amd64-Linux-gcc-shared-${mode}</artifactId>
             <version>1.2.0</version>
         </dependency>
     </dependencies>
