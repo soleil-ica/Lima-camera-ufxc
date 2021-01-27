@@ -66,8 +66,14 @@ namespace lima
 
     	virtual void getValidRanges(ValidRangesType& valid_ranges);
 
+        void updateValidRanges();
+
     private:
     	Camera& m_cam;
+
+        // used to manage updates of valid ranges
+        ValidRangesType m_current_valid_ranges;
+        bool m_first_read_of_valid_range;
     };
 
   } // namespace Ufxc
