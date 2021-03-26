@@ -326,13 +326,15 @@ void Camera::prepareAcq()
     if((m_counting_mode == CountingModes::PumpProbeProbe_32)&&(m_nb_frames != 1LL))
 		THROW_HW_ERROR(Error) << "Incorrect number of frames in Pump Probe Probe mode! Should be set to 1.";
 
+	//@@TODO AN remove this code below because fw is modified
+	/*
     // check if the number of frames is an even number in continuous modes
     if(((m_counting_mode == CountingModes::Continuous_2 ) || 
         (m_counting_mode == CountingModes::Continuous_4 ) ||
         (m_counting_mode == CountingModes::Continuous_8 ) ||
         (m_counting_mode == CountingModes::Continuous_14)) && (m_nb_frames % 2))
 		THROW_HW_ERROR(Error) << "Incorrect number of frames in Continuous mode! Should be an even number.";
-
+	*/
 	//@END	
 }
 
