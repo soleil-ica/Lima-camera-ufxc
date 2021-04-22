@@ -5,12 +5,12 @@
     <parent>
         <groupId>fr.soleil</groupId>
         <artifactId>super-pom-C-CPP</artifactId>
-        <version>20.2.0-64</version>
+        <version>21.2.5-64</version>
     </parent>
 
     <groupId>fr.soleil.lib.Lima.Camera</groupId>
     <artifactId>LimaUfxc-amd64-Linux-gcc-shared-${mode}</artifactId>
-    <version>1.2.0</version>
+    <version>2.0.0</version>
 
     <packaging>nar</packaging>
     <name>LimaUfxc</name>
@@ -19,7 +19,6 @@
 	<properties>
 		<!-- path to the 64 bits libs -->
         <libs-64bits>/home/informatique/ica/ica/LIB_EL6_64</libs-64bits>
-        <!--<libs-64bits>/media/sf_Partage/DeviceSources-ufxc-github/LIB_EL6_64</libs-64bits>-->
 	</properties>
     
     <scm>
@@ -32,13 +31,13 @@
         <dependency>
             <groupId>fr.soleil.lib</groupId>
             <artifactId>LimaCore-amd64-Linux-gcc-shared-${mode}</artifactId>
-            <version>1.7.9</version>
+            <version>1.7.10</version>
         </dependency>
         
         <dependency>
             <groupId>fr.soleil.lib</groupId>
             <artifactId>UFXCLib-amd64-Linux-gcc-shared-${mode}</artifactId>
-            <version>1.2.0</version>
+            <version>1.2.1</version>
         </dependency>
     </dependencies>
 
