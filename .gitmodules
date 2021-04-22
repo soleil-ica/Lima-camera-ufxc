@@ -1,0 +1,3 @@
+[submodule "UFXC-LIB"]
+	path = UFXC-LIB
+	url = git@github.com:soleil-ica/UFXC-LIB.git
