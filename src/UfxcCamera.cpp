@@ -940,31 +940,31 @@ bool Camera::checkTrigModeOfCountingMode(TrigMode trig_mode, CountingModes count
                                                             << DEB_VAR1(counting_mode);
 	bool valid_mode = true;
 
-    if((counting_mode == CountingModes::Continuous_2 ) ||
-       (counting_mode == CountingModes::Continuous_4 ) ||
-       (counting_mode == CountingModes::Continuous_8 ) ||
-       (counting_mode == CountingModes::Continuous_14))
-    {
-        if((trig_mode != IntTrig) && (trig_mode != ExtTrigSingle))
-            valid_mode = false;
-    }
-    else
-    if((counting_mode == CountingModes::Standard_14   ) ||
-       (counting_mode == CountingModes::LongCounter_28))
-    {
-        if((trig_mode != IntTrig) && (trig_mode != ExtTrigSingle) && (trig_mode != ExtTrigMult))
-            valid_mode = false;
-    }
-    else
-    if(counting_mode == CountingModes::PumpProbeProbe_32)
-    {
-        if(trig_mode != ExtTrigMult)
-            valid_mode = false;
-    }
-    else
-    {
-        DEB_ERROR() << "Camera::checkTrigModeOfCountingMode - counting mode " << counting_mode << "is not managed!";
-    }
+	switch(counting_mode)
+	{
+		case CountingModes::Continuous_2 : 
+		case CountingModes::Continuous_4 : 
+		case CountingModes::Continuous_8 : 
+		case CountingModes::Continuous_14 : 
+		case CountingModes::Standard_14 : 
+		case CountingModes::LongCounter_28 : 
+		if( (trig_mode != IntTrig) && (trig_mode != ExtTrigSingle) )
+		{
+			valid_mode = false;
+		}
+		break;
+
+		case CountingModes::PumpProbeProbe_32 : 
+		if(trig_mode != ExtTrigMult)
+		{
+			valid_mode = false;
+		}
+		break;
+
+		default : 
+		DEB_ERROR() << "Camera::checkTrigModeOfCountingMode - counting mode " << counting_mode << "is not managed!";
+		break;
+	}
 
 	return valid_mode;
 }
