@@ -1085,6 +1085,12 @@ void Camera::setTrigMode(TrigMode mode)
             m_ufxc_interface->set_acq_mode(acq_mode);
         }
 
+		// DET-407
+		// setTrigMode is called before setExpTime so the previous m_exp_time used value (to compute nb frames) can be false.
+		if(m_counting_mode == lima::Ufxc::Camera::CountingModes::PumpProbeProbe_32)
+		{
+        	computePumpProbeNbFrames(m_exp_time);
+		}
         // recursive lock problem - can not be called with a locked mutex
         setNbFrames(m_nb_frames);
 	}
@@ -1872,14 +1878,17 @@ void Camera::computePumpProbeNbFrames(double in_exposure)
             AutoMutex aLock(m_cond.mutex());
 
             double acquisition_frequency = m_ufxc_interface->get_pump_probe_frequency_Hz();
+
             nb_frames_pump_probe = static_cast<int> (round(in_exposure * acquisition_frequency / 2)*2);
 
             DEB_TRACE() << "in_exposure = "           << in_exposure          ;
+
             DEB_TRACE() << "acquisition_frequency = " << acquisition_frequency;
             DEB_TRACE() << "nb_frames_pump_probe = "  << nb_frames_pump_probe ;
         }
 
         // recursive lock problem - can not be called with a locked mutex
+
 		set_pump_probe_nb_frames(nb_frames_pump_probe);
     }
 	catch(const ufxclib::Exception& ue)
@@ -1893,4 +1902,5 @@ void Camera::computePumpProbeNbFrames(double in_exposure)
 		DEB_ERROR() << err_msg;
 		THROW_HW_FATAL(ErrorType::Error) << err_msg.str();
 	}
+
 }
