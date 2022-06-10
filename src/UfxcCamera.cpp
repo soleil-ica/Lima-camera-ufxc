@@ -319,23 +319,9 @@ void Camera::prepareAcq()
 {
 	DEB_MEMBER_FUNCT();
 	//@BEGIN : some stuff on Driver/API before start acquisition
-	// Only snap is allowed
-	if(m_nb_frames == 0LL)
-		THROW_HW_ERROR(ErrorType::Error) << "Start mode is not allowed for this device! Please use Snap mode.";
 
     if((m_counting_mode == CountingModes::PumpProbeProbe_32)&&(m_nb_frames != 1LL))
 		THROW_HW_ERROR(Error) << "Incorrect number of frames in Pump Probe Probe mode! Should be set to 1.";
-
-	//@@TODO AN remove this code below because fw is modified
-	/*
-    // check if the number of frames is an even number in continuous modes
-    if(((m_counting_mode == CountingModes::Continuous_2 ) || 
-        (m_counting_mode == CountingModes::Continuous_4 ) ||
-        (m_counting_mode == CountingModes::Continuous_8 ) ||
-        (m_counting_mode == CountingModes::Continuous_14)) && (m_nb_frames % 2))
-		THROW_HW_ERROR(Error) << "Incorrect number of frames in Continuous mode! Should be an even number.";
-	*/
-	//@END	
 }
 
 //-----------------------------------------------------
