@@ -911,6 +911,14 @@ HwEventCtrlObj* Camera::getEventCtrlObj()
 	return &m_event_ctrl_obj;
 }
 
+yat::uint8 Camera::get_detector_chips_count(const std::string& Ufxc_Model)
+{
+	// convert the Ufxc_Model (label) to the detector type used by the SDK
+	ufxclib::EnumDetectorType sdk_detector_type = UFXCInterface::get_detector_type_from_label(Ufxc_Model);
+
+	return UFXCInterface::get_detector_chips_count_from_type(sdk_detector_type);
+}
+
 //-----------------------------------------------------
 //
 //-----------------------------------------------------

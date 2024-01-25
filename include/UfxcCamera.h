@@ -118,6 +118,8 @@ public:
     void getDetectorImageSize(Size& size);
     void getPixelSize(double& sizex, double& sizey);
 
+    static yat::uint8 get_detector_chips_count(const std::string& Ufxc_Model);
+
     // -- Buffer control object
     HwBufferCtrlObj* getBufferCtrlObj();
     HwEventCtrlObj*  getEventCtrlObj();
