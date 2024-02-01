@@ -168,8 +168,9 @@ bool Camera::convertCountingModeEnum(enum lima::Ufxc::Camera::CountingModes & in
  ************************************************************************/
 Camera::Camera(	const std::string& Ufxc_Model     ,
                 const std::string& TCP_ip_address , unsigned long TCP_port ,
-				const std::vector<std::string>& SFP_ip_addresses,
-				const std::vector<unsigned long>& SFP_ports,
+				const std::string& SFP1_ip_address, unsigned long SFP1_port,
+				const std::string& SFP2_ip_address, unsigned long SFP2_port,
+				const std::string& SFP3_ip_address, unsigned long SFP3_port,
                 unsigned long      SFP_MTU        ,
                 unsigned long      timeout_ms     ,
                 unsigned long      pixel_depth    ,
@@ -201,22 +202,29 @@ Camera::Camera(	const std::string& Ufxc_Model     ,
     	    DEB_ERROR() << error_message;
         }
 
-		ufxclib::DaqCnxConfig TCP_cnx;
+		ufxclib::DaqCnxConfig TCP_cnx, SFP1_cnx, SFP2_cnx, SFP3_cnx;
 		TCP_cnx.ip_address          = TCP_ip_address;
 		TCP_cnx.configuration_port  = TCP_port;
 		TCP_cnx.socket_timeout_ms   = timeout_ms;
 		TCP_cnx.protocol            = ufxclib::EnumProtocol::TCP;
 
-		std::vector<ufxclib::DaqCnxConfig> SFP_cnx_lst;
-		for (size_t i=0 ; i<SFP_ip_addresses.size() ; i++ )
-		{
-			ufxclib::DaqCnxConfig SFP_cnx;
-			SFP_cnx.ip_address         = SFP_ip_addresses[i];
-			SFP_cnx.configuration_port = SFP_ports[i];
-			SFP_cnx.socket_timeout_ms  = timeout_ms;
-			SFP_cnx.protocol           = ufxclib::EnumProtocol::UDP;
-			SFP_cnx_lst.push_back(SFP_cnx);
-		}
+		SFP1_cnx.ip_address         = SFP1_ip_address;
+		SFP1_cnx.configuration_port = SFP1_port;
+		SFP1_cnx.socket_timeout_ms  = timeout_ms;
+		SFP1_cnx.protocol           = ufxclib::EnumProtocol::UDP;
+
+		SFP2_cnx.ip_address         = SFP2_ip_address;
+		SFP2_cnx.configuration_port = SFP2_port;
+		SFP2_cnx.socket_timeout_ms  = timeout_ms;
+		SFP2_cnx.protocol           = ufxclib::EnumProtocol::UDP;
+
+		SFP3_cnx.ip_address         = SFP3_ip_address;
+		SFP3_cnx.configuration_port = SFP3_port;
+		SFP3_cnx.socket_timeout_ms  = timeout_ms;
+		SFP3_cnx.protocol           = ufxclib::EnumProtocol::UDP;
+
+		//- prepare the registers
+		SetHardwareRegisters();
 
 		//- create the main ufxc object
 		m_ufxc_interface = new ufxclib::UFXCInterface();
@@ -224,11 +232,8 @@ Camera::Camera(	const std::string& Ufxc_Model     ,
         // convert the Ufxc_Model (label) to the detector type used by the SDK
         ufxclib::EnumDetectorType sdk_detector_type = m_ufxc_interface->get_detector_type_from_label(Ufxc_Model);
 
-		//- prepare the registers
-		SetHardwareRegisters(m_ufxc_interface->get_detector_chips_count_from_type(sdk_detector_type));
-
 		//- connect to the DAQ/Detector
-		m_ufxc_interface->open_connection(sdk_detector_type, TCP_cnx, SFP_cnx_lst, SFP_MTU);
+		m_ufxc_interface->open_connection(sdk_detector_type, TCP_cnx, SFP1_cnx, SFP2_cnx, SFP3_cnx, SFP_MTU);
 
 		//- set the registers to the DAQ
 		m_ufxc_interface->set_acquisition_registers_names(m_acquisition_registers);
@@ -1552,18 +1557,18 @@ void Camera::get_detector_temperature(unsigned long& temp)
 //-----------------------------------------------------
 //
 //-----------------------------------------------------
-void Camera::set_threshold_Low(size_t index, float thr)
+void Camera::set_threshold_Low1(float thr)
 {
 	DEB_MEMBER_FUNCT();
 	AutoMutex aLock(m_cond.mutex());
 	try
 	{
-		m_ufxc_interface->set_low_threshold(index, thr);
+		m_ufxc_interface->set_low_1_threshold(thr);
 	}
 	catch(const ufxclib::Exception& ue)
 	{
 		std::ostringstream err_msg;
-		err_msg << "Error in Camera::set_threshold_Low() :"
+		err_msg << "Error in Camera::set_threshold_Low1() :"
 		 << "\nreason : " << ue.errors[0].reason
 		 << "\ndesc : " << ue.errors[0].desc
 		 << "\norigin : " << ue.errors[0].origin
@@ -1576,18 +1581,18 @@ void Camera::set_threshold_Low(size_t index, float thr)
 //-----------------------------------------------------
 //
 //-----------------------------------------------------	
-void Camera::get_threshold_Low(size_t index, unsigned long& thr)
+void Camera::get_threshold_Low1(unsigned long& thr)
 {
 	DEB_MEMBER_FUNCT();
 	AutoMutex aLock(m_cond.mutex());
 	try
 	{
-		thr = m_ufxc_interface->get_low_threshold(index);
+		thr = m_ufxc_interface->get_low_1_threshold();
 	}
 	catch(const ufxclib::Exception& ue)
 	{
 		std::ostringstream err_msg;
-		err_msg << "Error in Camera::get_threshold_Low() :"
+		err_msg << "Error in Camera::get_threshold_Low1() :"
 		 << "\nreason : " << ue.errors[0].reason
 		 << "\ndesc : " << ue.errors[0].desc
 		 << "\norigin : " << ue.errors[0].origin
@@ -1600,18 +1605,18 @@ void Camera::get_threshold_Low(size_t index, unsigned long& thr)
 //-----------------------------------------------------
 //
 //-----------------------------------------------------
-void Camera::set_threshold_High(size_t index, float thr)
+void Camera::set_threshold_Low2(float thr)
 {
 	DEB_MEMBER_FUNCT();
 	AutoMutex aLock(m_cond.mutex());
 	try
 	{
-		m_ufxc_interface->set_high_threshold(index, thr);
+		m_ufxc_interface->set_low_2_threshold(thr);
 	}
 	catch(const ufxclib::Exception& ue)
 	{
 		std::ostringstream err_msg;
-		err_msg << "Error in Camera::set_threshold_High() :"
+		err_msg << "Error in Camera::set_threshold_Low2() :"
 		 << "\nreason : " << ue.errors[0].reason
 		 << "\ndesc : " << ue.errors[0].desc
 		 << "\norigin : " << ue.errors[0].origin
@@ -1624,18 +1629,90 @@ void Camera::set_threshold_High(size_t index, float thr)
 //-----------------------------------------------------
 //
 //-----------------------------------------------------	
-void Camera::get_threshold_High(size_t index, unsigned long& thr)
+void Camera::get_threshold_Low2(unsigned long& thr)
 {
 	DEB_MEMBER_FUNCT();
 	AutoMutex aLock(m_cond.mutex());
 	try
 	{
-		thr = m_ufxc_interface->get_high_threshold(index);
+		thr = m_ufxc_interface->get_low_2_threshold();
 	}
 	catch(const ufxclib::Exception& ue)
 	{
 		std::ostringstream err_msg;
-		err_msg << "Error in Camera::get_threshold_High() :"
+		err_msg << "Error in Camera::get_threshold_Low2() :"
+		 << "\nreason : " << ue.errors[0].reason
+		 << "\ndesc : " << ue.errors[0].desc
+		 << "\norigin : " << ue.errors[0].origin
+		 << std::endl;
+		DEB_ERROR() << err_msg;
+		THROW_HW_FATAL(ErrorType::Error) << err_msg.str();
+	}
+}
+
+//-----------------------------------------------------
+//
+//-----------------------------------------------------
+void Camera::set_threshold_High1(float thr)
+{
+	DEB_MEMBER_FUNCT();
+	AutoMutex aLock(m_cond.mutex());
+	try
+	{
+		m_ufxc_interface->set_high_1_threshold(thr);
+	}
+	catch(const ufxclib::Exception& ue)
+	{
+		std::ostringstream err_msg;
+		err_msg << "Error in Camera::set_threshold_High1() :"
+		 << "\nreason : " << ue.errors[0].reason
+		 << "\ndesc : " << ue.errors[0].desc
+		 << "\norigin : " << ue.errors[0].origin
+		 << std::endl;
+		DEB_ERROR() << err_msg;
+		THROW_HW_FATAL(ErrorType::Error) << err_msg.str();
+	}
+}
+
+//-----------------------------------------------------
+//
+//-----------------------------------------------------	
+void Camera::get_threshold_High1(unsigned long& thr)
+{
+	DEB_MEMBER_FUNCT();
+	AutoMutex aLock(m_cond.mutex());
+	try
+	{
+		thr = m_ufxc_interface->get_high_1_threshold();
+	}
+	catch(const ufxclib::Exception& ue)
+	{
+		std::ostringstream err_msg;
+		err_msg << "Error in Camera::get_threshold_High1() :"
+		 << "\nreason : " << ue.errors[0].reason
+		 << "\ndesc : " << ue.errors[0].desc
+		 << "\norigin : " << ue.errors[0].origin
+		 << std::endl;
+		DEB_ERROR() << err_msg;
+		THROW_HW_FATAL(ErrorType::Error) << err_msg.str();
+	}
+}
+
+//-----------------------------------------------------
+//
+//-----------------------------------------------------
+void Camera::set_threshold_High2(float thr)
+{
+	DEB_MEMBER_FUNCT();
+	AutoMutex aLock(m_cond.mutex());
+	try
+	{
+		m_ufxc_interface->set_high_2_threshold(thr);
+	}
+	catch(const ufxclib::Exception& ue)
+	{
+		std::ostringstream err_msg;
+		err_msg << "Error in Camera::set_threshold_High2() :"
 		 << "\nreason : " << ue.errors[0].reason
 		 << "\ndesc : " << ue.errors[0].desc
 		 << "\norigin : " << ue.errors[0].origin
@@ -1669,36 +1746,47 @@ void Camera::set_detector_config_file(const std::string& file_name)
 	}
 }
 
+//-----------------------------------------------------
+//
+//-----------------------------------------------------	
+void Camera::get_threshold_High2(unsigned long& thr)
+{
+	DEB_MEMBER_FUNCT();
+	AutoMutex aLock(m_cond.mutex());
+	try
+	{
+		thr = m_ufxc_interface->get_high_2_threshold();
+	}
+	catch(const ufxclib::Exception& ue)
+	{
+		std::ostringstream err_msg;
+		err_msg << "Error in Camera::get_threshold_High2() :"
+		 << "\nreason : " << ue.errors[0].reason
+		 << "\ndesc : " << ue.errors[0].desc
+		 << "\norigin : " << ue.errors[0].origin
+		 << std::endl;
+		DEB_ERROR() << err_msg;
+		THROW_HW_FATAL(ErrorType::Error) << err_msg.str();
+	}
+}
 /*******************************************************
  * \brief Set the Hardware registers in the DAQ system
  *******************************************************/
-void Camera::SetHardwareRegisters(yat::uint8 detector_chips_count)
+void Camera::SetHardwareRegisters()
 {
-	for(yat::uint8 index=0 ;  index<detector_chips_count ; index++)
-	{
-		std::stringstream ssACQ_CONF_KEY_DET_THRESHOLD_LOW;
-		ssACQ_CONF_KEY_DET_THRESHOLD_LOW << ACQ_CONF_KEY_DET_THRESHOLD_LOW << index+1;
-		std::stringstream ssACQ_CONF_KEY_DET_THRESHOLD_HIGH;
-		ssACQ_CONF_KEY_DET_THRESHOLD_HIGH << ACQ_CONF_KEY_DET_THRESHOLD_HIGH << index+1;
-		
-		std::stringstream ssACQ_CONF_VALUE_DET_THRESHOLD_LOW;
-		ssACQ_CONF_VALUE_DET_THRESHOLD_LOW << "FMC.DET_THRESHOLD_LOW_" << index+1;
-		std::stringstream ssACQ_CONF_VALUE_DET_THRESHOLD_HIGH;
-		ssACQ_CONF_VALUE_DET_THRESHOLD_HIGH << "FMC.DET_THRESHOLD_HIGH_" << index+1;
-
-		m_acquisition_registers[ssACQ_CONF_KEY_DET_THRESHOLD_LOW.str()] = ssACQ_CONF_VALUE_DET_THRESHOLD_LOW.str();
-		m_acquisition_registers[ssACQ_CONF_KEY_DET_THRESHOLD_HIGH.str()] = ssACQ_CONF_VALUE_DET_THRESHOLD_HIGH.str();
-	}
-
-	m_acquisition_registers[ufxclib::ACQ_CONF_KEY_ACQ_MODE] = "FMC.ACQ_MODE";
-	m_acquisition_registers[ufxclib::ACQ_CONF_KEY_ACQ_COUNT_TIME] = "FMC.ACQ_COUNT_TIME";
-	m_acquisition_registers[ufxclib::ACQ_CONF_KEY_ACQ_WAIT_TIME] = "FMC.ACQ_WAIT_TIME";
-	m_acquisition_registers[ufxclib::ACQ_CONF_KEY_ACQ_NIMG] = "FMC.ACQ_NIMG";
-	m_acquisition_registers[ufxclib::ACQ_CONF_KEY_ACQ_NTRIG] = "FMC.ACQ_NTRIG";
-	m_acquisition_registers[ufxclib::ACQ_CONF_KEY_START_ACQ] = "FMC.StartAcq";
-	m_acquisition_registers[ufxclib::ACQ_CONF_KEY_ABORT_ACQ] = "FMC.AbortAcq";
-	m_acquisition_registers[ufxclib::ACQ_CONF_KEY_SFP_SOFT_RESET] = "SFP.SOFT_RESET";
-	m_acquisition_registers[ufxclib::ACQ_CONF_KEY_FMC_SOFT_RESET] = "FMC.SOFT_RESET";
+	m_acquisition_registers[ufxclib::EnumAcquisitionConfigKey::DET_THRESHOLD_LOW_1] = "FMC.DET_THRESHOLD_LOW_1";
+	m_acquisition_registers[ufxclib::EnumAcquisitionConfigKey::DET_THRESHOLD_LOW_2] = "FMC.DET_THRESHOLD_LOW_2";
+	m_acquisition_registers[ufxclib::EnumAcquisitionConfigKey::DET_THRESHOLD_HIGH_1] = "FMC.DET_THRESHOLD_HIGH_1";
+	m_acquisition_registers[ufxclib::EnumAcquisitionConfigKey::DET_THRESHOLD_HIGH_2] = "FMC.DET_THRESHOLD_HIGH_2";
+	m_acquisition_registers[ufxclib::EnumAcquisitionConfigKey::ACQ_MODE] = "FMC.ACQ_MODE";
+	m_acquisition_registers[ufxclib::EnumAcquisitionConfigKey::ACQ_COUNT_TIME] = "FMC.ACQ_COUNT_TIME";
+	m_acquisition_registers[ufxclib::EnumAcquisitionConfigKey::ACQ_WAIT_TIME] = "FMC.ACQ_WAIT_TIME";
+	m_acquisition_registers[ufxclib::EnumAcquisitionConfigKey::ACQ_NIMG] = "FMC.ACQ_NIMG";
+	m_acquisition_registers[ufxclib::EnumAcquisitionConfigKey::ACQ_NTRIG] = "FMC.ACQ_NTRIG";
+	m_acquisition_registers[ufxclib::EnumAcquisitionConfigKey::START_ACQ] = "FMC.StartAcq";
+	m_acquisition_registers[ufxclib::EnumAcquisitionConfigKey::ABORT_ACQ] = "FMC.AbortAcq";
+	m_acquisition_registers[ufxclib::EnumAcquisitionConfigKey::SFP_SOFT_RESET] = "SFP.SOFT_RESET";
+	m_acquisition_registers[ufxclib::EnumAcquisitionConfigKey::FMC_SOFT_RESET] = "FMC.SOFT_RESET";
 
 	m_detector_registers[ufxclib::EnumDetectorConfigKey::GLB_POL] = "FMC.GLB_POL";
 	m_detector_registers[ufxclib::EnumDetectorConfigKey::GLB_FS] = "FMC.GLB_FS";
