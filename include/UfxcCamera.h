@@ -192,7 +192,7 @@ private:
     //////////////////////////////
     // -- ufxc specific members
     //////////////////////////////
-    void SetHardwareRegisters(yat::uint8 detector_chips_count);
+    void SetHardwareRegisters(ufxclib::EnumDetectorType sdk_detector_type);
 
     class AcqThread;
 
