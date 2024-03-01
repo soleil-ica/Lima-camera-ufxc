@@ -168,9 +168,8 @@ bool Camera::convertCountingModeEnum(enum lima::Ufxc::Camera::CountingModes & in
  ************************************************************************/
 Camera::Camera(	const std::string& Ufxc_Model     ,
                 const std::string& TCP_ip_address , unsigned long TCP_port ,
-				const std::string& SFP1_ip_address, unsigned long SFP1_port,
-				const std::string& SFP2_ip_address, unsigned long SFP2_port,
-				const std::string& SFP3_ip_address, unsigned long SFP3_port,
+				const std::vector<std::string>& SFP_ip_addresses,
+				const std::vector<unsigned long>& SFP_ports,
                 unsigned long      SFP_MTU        ,
                 unsigned long      timeout_ms     ,
                 unsigned long      pixel_depth    ,
@@ -202,29 +201,22 @@ Camera::Camera(	const std::string& Ufxc_Model     ,
     	    DEB_ERROR() << error_message;
         }
 
-		ufxclib::DaqCnxConfig TCP_cnx, SFP1_cnx, SFP2_cnx, SFP3_cnx;
+		ufxclib::DaqCnxConfig TCP_cnx;
 		TCP_cnx.ip_address          = TCP_ip_address;
 		TCP_cnx.configuration_port  = TCP_port;
 		TCP_cnx.socket_timeout_ms   = timeout_ms;
 		TCP_cnx.protocol            = ufxclib::EnumProtocol::TCP;
 
-		SFP1_cnx.ip_address         = SFP1_ip_address;
-		SFP1_cnx.configuration_port = SFP1_port;
-		SFP1_cnx.socket_timeout_ms  = timeout_ms;
-		SFP1_cnx.protocol           = ufxclib::EnumProtocol::UDP;
-
-		SFP2_cnx.ip_address         = SFP2_ip_address;
-		SFP2_cnx.configuration_port = SFP2_port;
-		SFP2_cnx.socket_timeout_ms  = timeout_ms;
-		SFP2_cnx.protocol           = ufxclib::EnumProtocol::UDP;
-
-		SFP3_cnx.ip_address         = SFP3_ip_address;
-		SFP3_cnx.configuration_port = SFP3_port;
-		SFP3_cnx.socket_timeout_ms  = timeout_ms;
-		SFP3_cnx.protocol           = ufxclib::EnumProtocol::UDP;
-
-		//- prepare the registers
-		SetHardwareRegisters();
+		std::vector<ufxclib::DaqCnxConfig> SFP_cnx_lst;
+		for (size_t i=0 ; i<SFP_ip_addresses.size() ; i++ )
+		{
+			ufxclib::DaqCnxConfig SFP_cnx;
+			SFP_cnx.ip_address         = SFP_ip_addresses[i];
+			SFP_cnx.configuration_port = SFP_ports[i];
+			SFP_cnx.socket_timeout_ms  = timeout_ms;
+			SFP_cnx.protocol           = ufxclib::EnumProtocol::UDP;
+			SFP_cnx_lst.push_back(SFP_cnx);
+		}
 
 		//- create the main ufxc object
 		m_ufxc_interface = new ufxclib::UFXCInterface();
@@ -232,8 +224,11 @@ Camera::Camera(	const std::string& Ufxc_Model     ,
         // convert the Ufxc_Model (label) to the detector type used by the SDK
         ufxclib::EnumDetectorType sdk_detector_type = m_ufxc_interface->get_detector_type_from_label(Ufxc_Model);
 
+		//- prepare the registers
+		SetHardwareRegisters(sdk_detector_type);
+
 		//- connect to the DAQ/Detector
-		m_ufxc_interface->open_connection(sdk_detector_type, TCP_cnx, SFP1_cnx, SFP2_cnx, SFP3_cnx, SFP_MTU);
+		m_ufxc_interface->open_connection(sdk_detector_type, TCP_cnx, SFP_cnx_lst, SFP_MTU);
 
 		//- set the registers to the DAQ
 		m_ufxc_interface->set_acquisition_registers_names(m_acquisition_registers);
@@ -407,32 +402,39 @@ void Camera::getStatus(Camera::Status& status)
     	ufxclib::EnumDetectorStatus det_status;
 
         // getting the detector status
-	    det_status = m_ufxc_interface->get_detector_status();
-
-	    switch(det_status)
-	    {
-		    case ufxclib::EnumDetectorStatus::E_DET_READY:
-			    m_status = Camera::Ready;
-			    //DEB_TRACE() << "E_DET_READY";
-			    break;
-		    case ufxclib::EnumDetectorStatus::E_DET_BUSY:
-			    m_status = Camera::Busy;
-			    //DEB_TRACE() << "E_DET_BUSY";
-			    break;
-		    case ufxclib::EnumDetectorStatus::E_DET_DELAY_SCANNING:
-		    case ufxclib::EnumDetectorStatus::E_DET_CONFIGURING:
-			    m_status = Camera::Configuring;
-			    //DEB_TRACE() << "E_DET_CONFIGURING";
-			    break;
-		    case ufxclib::EnumDetectorStatus::E_DET_NOT_CONFIGURED:
-			    m_status = Camera::Ready;
-			    //DEB_TRACE() << "E_DET_NOT_CONFIGURED";
-			    break;
-		    case ufxclib::EnumDetectorStatus::E_DET_ERROR:
-			    m_status = Camera::Fault;
-			    DEB_TRACE() << "E_DET_ERROR";
-			    break;
-	    }
+		try
+		{
+		    det_status = m_ufxc_interface->get_detector_status();
+		
+			switch(det_status)
+			{
+				case ufxclib::EnumDetectorStatus::E_DET_READY:
+					m_status = Camera::Ready;
+					//DEB_TRACE() << "E_DET_READY";
+					break;
+				case ufxclib::EnumDetectorStatus::E_DET_BUSY:
+					m_status = Camera::Busy;
+					//DEB_TRACE() << "E_DET_BUSY";
+					break;
+				case ufxclib::EnumDetectorStatus::E_DET_DELAY_SCANNING:
+				case ufxclib::EnumDetectorStatus::E_DET_CONFIGURING:
+					m_status = Camera::Configuring;
+					//DEB_TRACE() << "E_DET_CONFIGURING";
+					break;
+				case ufxclib::EnumDetectorStatus::E_DET_NOT_CONFIGURED:
+					m_status = Camera::Ready;
+					//DEB_TRACE() << "E_DET_NOT_CONFIGURED";
+					break;
+				case ufxclib::EnumDetectorStatus::E_DET_ERROR:
+					m_status = Camera::Fault;
+					DEB_TRACE() << "E_DET_ERROR";
+					break;
+			}
+		}
+		catch(const ufxclib::Exception& e)
+		{
+			m_status = Camera::Fault;
+		}
     }
 
 	status = m_status;
@@ -914,6 +916,14 @@ HwBufferCtrlObj* Camera::getBufferCtrlObj()
 HwEventCtrlObj* Camera::getEventCtrlObj()
 {
 	return &m_event_ctrl_obj;
+}
+
+yat::uint8 Camera::get_detector_chips_count(const std::string& Ufxc_Model)
+{
+	// convert the Ufxc_Model (label) to the detector type used by the SDK
+	ufxclib::EnumDetectorType sdk_detector_type = UFXCInterface::get_detector_type_from_label(Ufxc_Model);
+
+	return UFXCInterface::get_detector_chips_count_from_type(sdk_detector_type);
 }
 
 //-----------------------------------------------------
@@ -1557,18 +1567,18 @@ void Camera::get_detector_temperature(unsigned long& temp)
 //-----------------------------------------------------
 //
 //-----------------------------------------------------
-void Camera::set_threshold_Low1(float thr)
+void Camera::set_threshold_Low(size_t index, float thr)
 {
 	DEB_MEMBER_FUNCT();
 	AutoMutex aLock(m_cond.mutex());
 	try
 	{
-		m_ufxc_interface->set_low_1_threshold(thr);
+		m_ufxc_interface->set_low_threshold(index, thr);
 	}
 	catch(const ufxclib::Exception& ue)
 	{
 		std::ostringstream err_msg;
-		err_msg << "Error in Camera::set_threshold_Low1() :"
+		err_msg << "Error in Camera::set_threshold_Low() :"
 		 << "\nreason : " << ue.errors[0].reason
 		 << "\ndesc : " << ue.errors[0].desc
 		 << "\norigin : " << ue.errors[0].origin
@@ -1581,18 +1591,18 @@ void Camera::set_threshold_Low1(float thr)
 //-----------------------------------------------------
 //
 //-----------------------------------------------------	
-void Camera::get_threshold_Low1(unsigned long& thr)
+void Camera::get_threshold_Low(size_t index, unsigned long& thr)
 {
 	DEB_MEMBER_FUNCT();
 	AutoMutex aLock(m_cond.mutex());
 	try
 	{
-		thr = m_ufxc_interface->get_low_1_threshold();
+		thr = m_ufxc_interface->get_low_threshold(index);
 	}
 	catch(const ufxclib::Exception& ue)
 	{
 		std::ostringstream err_msg;
-		err_msg << "Error in Camera::get_threshold_Low1() :"
+		err_msg << "Error in Camera::get_threshold_Low() :"
 		 << "\nreason : " << ue.errors[0].reason
 		 << "\ndesc : " << ue.errors[0].desc
 		 << "\norigin : " << ue.errors[0].origin
@@ -1605,66 +1615,18 @@ void Camera::get_threshold_Low1(unsigned long& thr)
 //-----------------------------------------------------
 //
 //-----------------------------------------------------
-void Camera::set_threshold_Low2(float thr)
+void Camera::set_threshold_High(size_t index, float thr)
 {
 	DEB_MEMBER_FUNCT();
 	AutoMutex aLock(m_cond.mutex());
 	try
 	{
-		m_ufxc_interface->set_low_2_threshold(thr);
+		m_ufxc_interface->set_high_threshold(index, thr);
 	}
 	catch(const ufxclib::Exception& ue)
 	{
 		std::ostringstream err_msg;
-		err_msg << "Error in Camera::set_threshold_Low2() :"
-		 << "\nreason : " << ue.errors[0].reason
-		 << "\ndesc : " << ue.errors[0].desc
-		 << "\norigin : " << ue.errors[0].origin
-		 << std::endl;
-		DEB_ERROR() << err_msg;
-		THROW_HW_FATAL(ErrorType::Error) << err_msg.str();
-	}
-}
-
-//-----------------------------------------------------
-//
-//-----------------------------------------------------	
-void Camera::get_threshold_Low2(unsigned long& thr)
-{
-	DEB_MEMBER_FUNCT();
-	AutoMutex aLock(m_cond.mutex());
-	try
-	{
-		thr = m_ufxc_interface->get_low_2_threshold();
-	}
-	catch(const ufxclib::Exception& ue)
-	{
-		std::ostringstream err_msg;
-		err_msg << "Error in Camera::get_threshold_Low2() :"
-		 << "\nreason : " << ue.errors[0].reason
-		 << "\ndesc : " << ue.errors[0].desc
-		 << "\norigin : " << ue.errors[0].origin
-		 << std::endl;
-		DEB_ERROR() << err_msg;
-		THROW_HW_FATAL(ErrorType::Error) << err_msg.str();
-	}
-}
-
-//-----------------------------------------------------
-//
-//-----------------------------------------------------
-void Camera::set_threshold_High1(float thr)
-{
-	DEB_MEMBER_FUNCT();
-	AutoMutex aLock(m_cond.mutex());
-	try
-	{
-		m_ufxc_interface->set_high_1_threshold(thr);
-	}
-	catch(const ufxclib::Exception& ue)
-	{
-		std::ostringstream err_msg;
-		err_msg << "Error in Camera::set_threshold_High1() :"
+		err_msg << "Error in Camera::set_threshold_High() :"
 		 << "\nreason : " << ue.errors[0].reason
 		 << "\ndesc : " << ue.errors[0].desc
 		 << "\norigin : " << ue.errors[0].origin
@@ -1677,42 +1639,18 @@ void Camera::set_threshold_High1(float thr)
 //-----------------------------------------------------
 //
 //-----------------------------------------------------	
-void Camera::get_threshold_High1(unsigned long& thr)
+void Camera::get_threshold_High(size_t index, unsigned long& thr)
 {
 	DEB_MEMBER_FUNCT();
 	AutoMutex aLock(m_cond.mutex());
 	try
 	{
-		thr = m_ufxc_interface->get_high_1_threshold();
+		thr = m_ufxc_interface->get_high_threshold(index);
 	}
 	catch(const ufxclib::Exception& ue)
 	{
 		std::ostringstream err_msg;
-		err_msg << "Error in Camera::get_threshold_High1() :"
-		 << "\nreason : " << ue.errors[0].reason
-		 << "\ndesc : " << ue.errors[0].desc
-		 << "\norigin : " << ue.errors[0].origin
-		 << std::endl;
-		DEB_ERROR() << err_msg;
-		THROW_HW_FATAL(ErrorType::Error) << err_msg.str();
-	}
-}
-
-//-----------------------------------------------------
-//
-//-----------------------------------------------------
-void Camera::set_threshold_High2(float thr)
-{
-	DEB_MEMBER_FUNCT();
-	AutoMutex aLock(m_cond.mutex());
-	try
-	{
-		m_ufxc_interface->set_high_2_threshold(thr);
-	}
-	catch(const ufxclib::Exception& ue)
-	{
-		std::ostringstream err_msg;
-		err_msg << "Error in Camera::set_threshold_High2() :"
+		err_msg << "Error in Camera::get_threshold_High() :"
 		 << "\nreason : " << ue.errors[0].reason
 		 << "\ndesc : " << ue.errors[0].desc
 		 << "\norigin : " << ue.errors[0].origin
@@ -1746,47 +1684,44 @@ void Camera::set_detector_config_file(const std::string& file_name)
 	}
 }
 
-//-----------------------------------------------------
-//
-//-----------------------------------------------------	
-void Camera::get_threshold_High2(unsigned long& thr)
-{
-	DEB_MEMBER_FUNCT();
-	AutoMutex aLock(m_cond.mutex());
-	try
-	{
-		thr = m_ufxc_interface->get_high_2_threshold();
-	}
-	catch(const ufxclib::Exception& ue)
-	{
-		std::ostringstream err_msg;
-		err_msg << "Error in Camera::get_threshold_High2() :"
-		 << "\nreason : " << ue.errors[0].reason
-		 << "\ndesc : " << ue.errors[0].desc
-		 << "\norigin : " << ue.errors[0].origin
-		 << std::endl;
-		DEB_ERROR() << err_msg;
-		THROW_HW_FATAL(ErrorType::Error) << err_msg.str();
-	}
-}
 /*******************************************************
  * \brief Set the Hardware registers in the DAQ system
  *******************************************************/
-void Camera::SetHardwareRegisters()
+void Camera::SetHardwareRegisters(ufxclib::EnumDetectorType sdk_detector_type)
 {
-	m_acquisition_registers[ufxclib::EnumAcquisitionConfigKey::DET_THRESHOLD_LOW_1] = "FMC.DET_THRESHOLD_LOW_1";
-	m_acquisition_registers[ufxclib::EnumAcquisitionConfigKey::DET_THRESHOLD_LOW_2] = "FMC.DET_THRESHOLD_LOW_2";
-	m_acquisition_registers[ufxclib::EnumAcquisitionConfigKey::DET_THRESHOLD_HIGH_1] = "FMC.DET_THRESHOLD_HIGH_1";
-	m_acquisition_registers[ufxclib::EnumAcquisitionConfigKey::DET_THRESHOLD_HIGH_2] = "FMC.DET_THRESHOLD_HIGH_2";
-	m_acquisition_registers[ufxclib::EnumAcquisitionConfigKey::ACQ_MODE] = "FMC.ACQ_MODE";
-	m_acquisition_registers[ufxclib::EnumAcquisitionConfigKey::ACQ_COUNT_TIME] = "FMC.ACQ_COUNT_TIME";
-	m_acquisition_registers[ufxclib::EnumAcquisitionConfigKey::ACQ_WAIT_TIME] = "FMC.ACQ_WAIT_TIME";
-	m_acquisition_registers[ufxclib::EnumAcquisitionConfigKey::ACQ_NIMG] = "FMC.ACQ_NIMG";
-	m_acquisition_registers[ufxclib::EnumAcquisitionConfigKey::ACQ_NTRIG] = "FMC.ACQ_NTRIG";
-	m_acquisition_registers[ufxclib::EnumAcquisitionConfigKey::START_ACQ] = "FMC.StartAcq";
-	m_acquisition_registers[ufxclib::EnumAcquisitionConfigKey::ABORT_ACQ] = "FMC.AbortAcq";
-	m_acquisition_registers[ufxclib::EnumAcquisitionConfigKey::SFP_SOFT_RESET] = "SFP.SOFT_RESET";
-	m_acquisition_registers[ufxclib::EnumAcquisitionConfigKey::FMC_SOFT_RESET] = "FMC.SOFT_RESET";
+	yat::uint8 detector_chips_count = m_ufxc_interface->get_detector_chips_count_from_type(sdk_detector_type);
+	for(yat::uint8 index=0 ;  index<detector_chips_count ; index++)
+	{
+		std::stringstream ssACQ_CONF_KEY_DET_THRESHOLD_LOW;
+		ssACQ_CONF_KEY_DET_THRESHOLD_LOW << ACQ_CONF_KEY_DET_THRESHOLD_LOW << index+1;
+		std::stringstream ssACQ_CONF_KEY_DET_THRESHOLD_HIGH;
+		ssACQ_CONF_KEY_DET_THRESHOLD_HIGH << ACQ_CONF_KEY_DET_THRESHOLD_HIGH << index+1;
+		
+		std::stringstream ssACQ_CONF_VALUE_DET_THRESHOLD_LOW;
+		ssACQ_CONF_VALUE_DET_THRESHOLD_LOW << "FMC.DET_THRESHOLD_LOW_" << index+1;
+		std::stringstream ssACQ_CONF_VALUE_DET_THRESHOLD_HIGH;
+		ssACQ_CONF_VALUE_DET_THRESHOLD_HIGH << "FMC.DET_THRESHOLD_HIGH_" << index+1;
+
+		m_acquisition_registers[ssACQ_CONF_KEY_DET_THRESHOLD_LOW.str()] = ssACQ_CONF_VALUE_DET_THRESHOLD_LOW.str();
+		m_acquisition_registers[ssACQ_CONF_KEY_DET_THRESHOLD_HIGH.str()] = ssACQ_CONF_VALUE_DET_THRESHOLD_HIGH.str();
+	}
+
+	m_acquisition_registers[ufxclib::ACQ_CONF_KEY_ACQ_MODE] = "FMC.ACQ_MODE";
+	m_acquisition_registers[ufxclib::ACQ_CONF_KEY_ACQ_COUNT_TIME] = "FMC.ACQ_COUNT_TIME";
+	m_acquisition_registers[ufxclib::ACQ_CONF_KEY_ACQ_WAIT_TIME] = "FMC.ACQ_WAIT_TIME";
+	m_acquisition_registers[ufxclib::ACQ_CONF_KEY_ACQ_NIMG] = "FMC.ACQ_NIMG";
+	m_acquisition_registers[ufxclib::ACQ_CONF_KEY_ACQ_NTRIG] = "FMC.ACQ_NTRIG";
+	m_acquisition_registers[ufxclib::ACQ_CONF_KEY_START_ACQ] = "FMC.StartAcq";
+	m_acquisition_registers[ufxclib::ACQ_CONF_KEY_ABORT_ACQ] = "FMC.AbortAcq";
+	m_acquisition_registers[ufxclib::ACQ_CONF_KEY_SFP_SOFT_RESET] = "SFP.SOFT_RESET";
+	if( sdk_detector_type==ufxclib::DETECTOR_U8DEM )
+	{
+		m_acquisition_registers[ufxclib::ACQ_CONF_KEY_FMC_SOFT_RESET] = "UFXSTATUS.SOFT_RESET";
+	}
+	else
+	{
+		m_acquisition_registers[ufxclib::ACQ_CONF_KEY_FMC_SOFT_RESET] = "FMC.SOFT_RESET";
+	}
 
 	m_detector_registers[ufxclib::EnumDetectorConfigKey::GLB_POL] = "FMC.GLB_POL";
 	m_detector_registers[ufxclib::EnumDetectorConfigKey::GLB_FS] = "FMC.GLB_FS";
@@ -1798,18 +1733,57 @@ void Camera::SetHardwareRegisters()
 	m_detector_registers[ufxclib::EnumDetectorConfigKey::GLB_BDIS] = "FMC.GLB_BDIS";
 	m_detector_registers[ufxclib::EnumDetectorConfigKey::GLB_BGSH] = "FMC.GLB_BGSH";
 	m_detector_registers[ufxclib::EnumDetectorConfigKey::GLB_BR] = "FMC.GLB_BR";
-	m_detector_registers[ufxclib::EnumDetectorConfigKey::DETECTOR_CONFIG] = "FMC.DetectorConfig";
 	m_detector_registers[ufxclib::EnumDetectorConfigKey::PIXCONF_BITLINE_NBR] = "FMC.PIXCONF_BITLINE_NBR";
-	m_detector_registers[ufxclib::EnumDetectorConfigKey::PIXCONF_COL_31_0_A] = "FMC.PIXCONF_COL_31_0_A";
-	m_detector_registers[ufxclib::EnumDetectorConfigKey::PIXCONF_COL_63_32_A] = "FMC.PIXCONF_COL_63_32_A";
-	m_detector_registers[ufxclib::EnumDetectorConfigKey::PIXCONF_COL_95_64_A] = "FMC.PIXCONF_COL_95_64_A";
-	m_detector_registers[ufxclib::EnumDetectorConfigKey::PIXCONF_COL_127_96_A] = "FMC.PIXCONF_COL_127_96_A";
-	m_detector_registers[ufxclib::EnumDetectorConfigKey::PIXCONF_COL_31_0_B] = "FMC.PIXCONF_COL_31_0_B";
-	m_detector_registers[ufxclib::EnumDetectorConfigKey::PIXCONF_COL_63_32_B] = "FMC.PIXCONF_COL_63_32_B";
-	m_detector_registers[ufxclib::EnumDetectorConfigKey::PIXCONF_COL_95_64_B] = "FMC.PIXCONF_COL_95_64_B";
-	m_detector_registers[ufxclib::EnumDetectorConfigKey::PIXCONF_COL_127_96_B] = "FMC.PIXCONF_COL_127_96_B";
-	m_detector_registers[ufxclib::EnumDetectorConfigKey::PIXLINE_CONFIG] = "FMC.PixLineConfig";
-
+	if( sdk_detector_type==ufxclib::DETECTOR_U8DEM )
+	{
+		m_detector_registers[ufxclib::EnumDetectorConfigKey::DETECTOR_CONFIG] = "FMC.DETECTORCONFIG";
+		m_detector_registers[ufxclib::EnumDetectorConfigKey::PIXLINE_CONFIG] = "FMC.PIXLINECONFIG";
+		m_detector_registers[ufxclib::EnumDetectorConfigKey::PIXCONF_COL_31_0_1] = "FMC.PIXCONF_COL_31_0_1";
+		m_detector_registers[ufxclib::EnumDetectorConfigKey::PIXCONF_COL_63_32_1] = "FMC.PIXCONF_COL_63_32_1";
+		m_detector_registers[ufxclib::EnumDetectorConfigKey::PIXCONF_COL_95_64_1] = "FMC.PIXCONF_COL_95_64_1";
+		m_detector_registers[ufxclib::EnumDetectorConfigKey::PIXCONF_COL_127_96_1] = "FMC.PIXCONF_COL_127_96_1";
+		m_detector_registers[ufxclib::EnumDetectorConfigKey::PIXCONF_COL_31_0_2] = "FMC.PIXCONF_COL_31_0_2";
+		m_detector_registers[ufxclib::EnumDetectorConfigKey::PIXCONF_COL_63_32_2] = "FMC.PIXCONF_COL_63_32_2";
+		m_detector_registers[ufxclib::EnumDetectorConfigKey::PIXCONF_COL_95_64_2] = "FMC.PIXCONF_COL_95_64_2";
+		m_detector_registers[ufxclib::EnumDetectorConfigKey::PIXCONF_COL_127_96_2] = "FMC.PIXCONF_COL_127_96_2";
+		m_detector_registers[ufxclib::EnumDetectorConfigKey::PIXCONF_COL_31_0_3] = "FMC.PIXCONF_COL_31_0_3";
+		m_detector_registers[ufxclib::EnumDetectorConfigKey::PIXCONF_COL_63_32_3] = "FMC.PIXCONF_COL_63_32_3";
+		m_detector_registers[ufxclib::EnumDetectorConfigKey::PIXCONF_COL_95_64_3] = "FMC.PIXCONF_COL_95_64_3";
+		m_detector_registers[ufxclib::EnumDetectorConfigKey::PIXCONF_COL_127_96_3] = "FMC.PIXCONF_COL_127_96_3";
+		m_detector_registers[ufxclib::EnumDetectorConfigKey::PIXCONF_COL_31_0_4] = "FMC.PIXCONF_COL_31_0_4";
+		m_detector_registers[ufxclib::EnumDetectorConfigKey::PIXCONF_COL_63_32_4] = "FMC.PIXCONF_COL_63_32_4";
+		m_detector_registers[ufxclib::EnumDetectorConfigKey::PIXCONF_COL_95_64_4] = "FMC.PIXCONF_COL_95_64_4";
+		m_detector_registers[ufxclib::EnumDetectorConfigKey::PIXCONF_COL_127_96_4] = "FMC.PIXCONF_COL_127_96_4";
+		m_detector_registers[ufxclib::EnumDetectorConfigKey::PIXCONF_COL_31_0_5] = "FMC.PIXCONF_COL_31_0_5";
+		m_detector_registers[ufxclib::EnumDetectorConfigKey::PIXCONF_COL_63_32_5] = "FMC.PIXCONF_COL_63_32_5";
+		m_detector_registers[ufxclib::EnumDetectorConfigKey::PIXCONF_COL_95_64_5] = "FMC.PIXCONF_COL_95_64_5";
+		m_detector_registers[ufxclib::EnumDetectorConfigKey::PIXCONF_COL_127_96_5] = "FMC.PIXCONF_COL_127_96_5";
+		m_detector_registers[ufxclib::EnumDetectorConfigKey::PIXCONF_COL_31_0_6] = "FMC.PIXCONF_COL_31_0_6";
+		m_detector_registers[ufxclib::EnumDetectorConfigKey::PIXCONF_COL_63_32_6] = "FMC.PIXCONF_COL_63_32_6";
+		m_detector_registers[ufxclib::EnumDetectorConfigKey::PIXCONF_COL_95_64_6] = "FMC.PIXCONF_COL_95_64_6";
+		m_detector_registers[ufxclib::EnumDetectorConfigKey::PIXCONF_COL_127_96_6] = "FMC.PIXCONF_COL_127_96_6";
+		m_detector_registers[ufxclib::EnumDetectorConfigKey::PIXCONF_COL_31_0_7] = "FMC.PIXCONF_COL_31_0_7";
+		m_detector_registers[ufxclib::EnumDetectorConfigKey::PIXCONF_COL_63_32_7] = "FMC.PIXCONF_COL_63_32_7";
+		m_detector_registers[ufxclib::EnumDetectorConfigKey::PIXCONF_COL_95_64_7] = "FMC.PIXCONF_COL_95_64_7";
+		m_detector_registers[ufxclib::EnumDetectorConfigKey::PIXCONF_COL_127_96_7] = "FMC.PIXCONF_COL_127_96_7";
+		m_detector_registers[ufxclib::EnumDetectorConfigKey::PIXCONF_COL_31_0_8] = "FMC.PIXCONF_COL_31_0_8";
+		m_detector_registers[ufxclib::EnumDetectorConfigKey::PIXCONF_COL_63_32_8] = "FMC.PIXCONF_COL_63_32_8";
+		m_detector_registers[ufxclib::EnumDetectorConfigKey::PIXCONF_COL_95_64_8] = "FMC.PIXCONF_COL_95_64_8";
+		m_detector_registers[ufxclib::EnumDetectorConfigKey::PIXCONF_COL_127_96_8] = "FMC.PIXCONF_COL_127_96_8";
+	}
+	else
+	{
+		m_detector_registers[ufxclib::EnumDetectorConfigKey::DETECTOR_CONFIG] = "FMC.DetectorConfig";
+		m_detector_registers[ufxclib::EnumDetectorConfigKey::PIXLINE_CONFIG] = "FMC.PixLineConfig";
+		m_detector_registers[ufxclib::EnumDetectorConfigKey::PIXCONF_COL_31_0_A] = "FMC.PIXCONF_COL_31_0_A";
+		m_detector_registers[ufxclib::EnumDetectorConfigKey::PIXCONF_COL_63_32_A] = "FMC.PIXCONF_COL_63_32_A";
+		m_detector_registers[ufxclib::EnumDetectorConfigKey::PIXCONF_COL_95_64_A] = "FMC.PIXCONF_COL_95_64_A";
+		m_detector_registers[ufxclib::EnumDetectorConfigKey::PIXCONF_COL_127_96_A] = "FMC.PIXCONF_COL_127_96_A";
+		m_detector_registers[ufxclib::EnumDetectorConfigKey::PIXCONF_COL_31_0_B] = "FMC.PIXCONF_COL_31_0_B";
+		m_detector_registers[ufxclib::EnumDetectorConfigKey::PIXCONF_COL_63_32_B] = "FMC.PIXCONF_COL_63_32_B";
+		m_detector_registers[ufxclib::EnumDetectorConfigKey::PIXCONF_COL_95_64_B] = "FMC.PIXCONF_COL_95_64_B";
+		m_detector_registers[ufxclib::EnumDetectorConfigKey::PIXCONF_COL_127_96_B] = "FMC.PIXCONF_COL_127_96_B";
+	}
 	m_monitor_registers[ufxclib::EnumMonitoringKey::TEMP_DAQ_PICO] = "SLOW.TEMP_DAQ_PICO";
 	m_monitor_registers[ufxclib::EnumMonitoringKey::TEMP_DAQ_SFP] = "SLOW.TEMP_DAQ_SFP";
 	m_monitor_registers[ufxclib::EnumMonitoringKey::FW_DELAY] = "FMC.FW_DELAY";
@@ -1823,11 +1797,19 @@ void Camera::SetHardwareRegisters()
 	m_monitor_registers[ufxclib::EnumMonitoringKey::ALIM_DET_1V2_DISC_B] = "SLOW.ALIM_DET_1V2_DISC_B";
 	m_monitor_registers[ufxclib::EnumMonitoringKey::ALIM_DET_1V2_VDDA_A] = "SLOW.ALIM_DET_1V2_VDDA_A";
 	m_monitor_registers[ufxclib::EnumMonitoringKey::ALIM_DET_1V2_VDDA_B] = "SLOW.ALIM_DET_1V2_VDDA_B";
-	m_monitor_registers[ufxclib::EnumMonitoringKey::DETECTOR_STATUS] = "FMC.DETECTOR_STATUS";
+	if( sdk_detector_type==ufxclib::DETECTOR_U8DEM )
+	{
+		m_monitor_registers[ufxclib::EnumMonitoringKey::DETECTOR_STATUS] = "UFXSTATUS.DETECTOR_STATUS";
+		m_monitor_registers[ufxclib::EnumMonitoringKey::EN_PIXCONF_SCANDELAY_SFP] = "FMC.EN_PIXCONF_SFP";
+	}
+	else
+	{
+		m_monitor_registers[ufxclib::EnumMonitoringKey::DETECTOR_STATUS] = "FMC.DETECTOR_STATUS";
+		m_monitor_registers[ufxclib::EnumMonitoringKey::EN_PIXCONF_SCANDELAY_SFP] = "FMC.EN_PIXCONF_SCANDELAY_SFP";
+	}
 	m_monitor_registers[ufxclib::EnumMonitoringKey::DELAY_SCAN] = "FMC.Delay_scan";
 	m_monitor_registers[ufxclib::EnumMonitoringKey::ABORT_DELAY] = "FMC.AbortAcq";
 	m_monitor_registers[ufxclib::EnumMonitoringKey::FIRMWARE_VERSION] = "*IDN";
-	m_monitor_registers[ufxclib::EnumMonitoringKey::EN_PIXCONF_SCANDELAY_SFP] = "FMC.EN_PIXCONF_SCANDELAY_SFP";
 }
 /*******************************************************
  * \brief Set trigger acquisition frequency for the pump and probe mode (2bits & ext triggger multi)

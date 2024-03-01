@@ -92,9 +92,8 @@ public:
     // constructor
     Camera( const std::string&  Ufxc_Model     ,                            //- Detector model (label) 
             const std::string&  TCP_ip_address , unsigned long TCP_port ,   //- IP Address and port for the config
-            const std::string&  SFP1_ip_address, unsigned long SFP1_port,   //- IP Address and port for the SFP1
-            const std::string&  SFP2_ip_address, unsigned long SFP2_port,   //- IP Address and port for the SFP2
-            const std::string&  SFP3_ip_address, unsigned long SFP3_port,   //- IP Address and port for the SFP3
+            const std::vector<std::string>& SFP_ip_addresses,               //- IP Addresses for the SFPs
+            const std::vector<unsigned long>& SFP_ports,                    //- IP ports for the SFPs
             unsigned long       SFP_MTU        ,                            //- MTU value of the SFP ports
             unsigned long       timeout_ms     ,                            //- timeout in ms
             unsigned long       pixel_depth    ,                            //- pixel depth from the generic device properties
@@ -118,6 +117,8 @@ public:
     void getDetectorModel(std::string& model);
     void getDetectorImageSize(Size& size);
     void getPixelSize(double& sizex, double& sizey);
+
+    static yat::uint8 get_detector_chips_count(const std::string& Ufxc_Model);
 
     // -- Buffer control object
     HwBufferCtrlObj* getBufferCtrlObj();
@@ -148,14 +149,10 @@ public:
     void get_lib_version(std::string & version);
     void get_firmware_version(std::string & version);
     void get_detector_temperature(unsigned long& temp);
-    void set_threshold_Low1(float thr);
-    void get_threshold_Low1(unsigned long& thr);
-    void set_threshold_Low2(float thr);
-    void get_threshold_Low2(unsigned long& thr);
-    void set_threshold_High1(float thr);
-    void get_threshold_High1(unsigned long& thr);
-    void set_threshold_High2(float thr);
-    void get_threshold_High2(unsigned long& thr);
+    void set_threshold_Low(size_t index, float thr);
+    void get_threshold_Low(size_t index, unsigned long& thr);
+    void set_threshold_High(size_t index, float thr);
+    void get_threshold_High(size_t index, unsigned long& thr);
     void set_detector_config_file(const std::string& file_name);    
     void set_pump_probe_trigger_acquisition_frequency(float frequency);
     void get_pump_probe_trigger_acquisition_frequency(float& frequency);
@@ -195,7 +192,7 @@ private:
     //////////////////////////////
     // -- ufxc specific members
     //////////////////////////////
-    void SetHardwareRegisters();
+    void SetHardwareRegisters(ufxclib::EnumDetectorType sdk_detector_type);
 
     class AcqThread;
 
@@ -220,7 +217,7 @@ private:
     // UFXC lib main object
     ufxclib::UFXCInterface* m_ufxc_interface;
     // Registers configuration
-    std::map<ufxclib::EnumAcquisitionConfigKey, std::string> m_acquisition_registers;
+    std::map<std::string, std::string> m_acquisition_registers;
     std::map<ufxclib::EnumDetectorConfigKey, std::string> m_detector_registers;
     std::map<ufxclib::EnumMonitoringKey, std::string> m_monitor_registers;
 
